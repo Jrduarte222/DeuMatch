@@ -6,19 +6,28 @@ from models import Usuario
 
 app = FastAPI()
 
+# CORS liberado (para conectar com frontend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ajuste depois para segurança
+    allow_origins=["*"],  # depois restrinja para segurança
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Criação automática das tabelas
 Base.metadata.create_all(bind=engine)
 
+# Diretório para imagens
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# ✅ Rota raiz (home)
+@app.get("/")
+def root():
+    return {"status": "API Deu Match está ativa 🚀"}
+
+# ✅ Rota de registro de participante
 @app.post("/users/register")
 async def register_user(
     name: str = Form(...),
@@ -29,7 +38,6 @@ async def register_user(
     fotos: list[UploadFile] = File(...)
 ):
     db = SessionLocal()
-
     nomes_imagens = []
 
     for foto in fotos:
@@ -53,3 +61,11 @@ async def register_user(
     db.close()
 
     return {"message": "Usuário registrado com sucesso!"}
+
+# ✅ Rota oficial para listar todos os participantes
+@app.get("/users")
+def listar_participantes():
+    db = SessionLocal()
+    participantes = db.query(Usuario).all()
+    db.close()
+    return participantes
