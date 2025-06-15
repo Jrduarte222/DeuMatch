@@ -6,6 +6,7 @@ from models import Usuario
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -24,6 +25,8 @@ Base.metadata.create_all(bind=engine)
 # Diretório para imagens
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ✅ Rota raiz (home)
 @app.get("/")
@@ -95,7 +98,7 @@ async def atualizar_usuario(
         fotos_existentes = usuario.fotos.split(",") if usuario.fotos else []
         usuario.fotos = ",".join(fotos_existentes + nomes_imagens)
 
-    db.commit()
+        db.commit()
     db.refresh(usuario)
     db.close()
 
