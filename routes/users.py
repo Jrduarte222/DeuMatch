@@ -109,3 +109,25 @@ async def list_users(role: Optional[str] = None):
     if role:
         return [u for u in fake_users_db if u.role == role]
     return fake_users_db
+
+@router.put("/suspender")
+async def suspender_usuario(email: str = Form(...)):
+    for user in fake_users_db:
+        if user.email == email:
+            user.status = "suspenso"
+            return {"message": "Usuário suspenso"}
+    raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+
+@router.delete("/{email}")
+async def excluir_usuario(email: str):
+    global fake_users_db
+    fake_users_db = [u for u in fake_users_db if u.email != email]
+    return {"message": f"Usuário {email} excluído com sucesso"}
+
+
+@router.delete("/limpar")
+async def limpar_todos():
+    fake_users_db.clear()
+    return {"message": "Todos os usuários foram excluídos"}
+

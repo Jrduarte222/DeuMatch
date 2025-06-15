@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
 from fastapi.staticfiles import StaticFiles
+from routes.users import router as users_router
 
 app = FastAPI()
 
@@ -18,6 +19,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(users_router)
 
 # Criação automática das tabelas
 Base.metadata.create_all(bind=engine)
