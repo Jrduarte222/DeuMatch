@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from database import Base, engine, SessionLocal
 from models import Usuario
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
@@ -63,9 +65,17 @@ async def register_user(
     return {"message": "Usuário registrado com sucesso!"}
 
 # ✅ Rota oficial para listar todos os participantes
-@app.get("/users")
-def listar_participantes():
+
+@app.get("/users/list")
+def listar_usuarios():
     db = SessionLocal()
-    participantes = db.query(Usuario).all()
+    usuarios = db.query(Usuario).all()
     db.close()
-    return participantes
+
+    usuarios_serializados = []
+    for usuario in usuarios:
+        user_dict = usuario.__dict__.copy()
+        user_dict.pop("_sa_instance_state", None)
+        usuarios_serializados.append(user_dict)
+
+    return JSONResponse(content=usuarios_serializados)
