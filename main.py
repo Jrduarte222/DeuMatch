@@ -5,6 +5,7 @@ from database import Base, engine, SessionLocal
 from models import Usuario
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from fastapi import HTTPException
 
 app = FastAPI()
 
@@ -65,6 +66,40 @@ async def register_user(
     return {"message": "Usuário registrado com sucesso!"}
 
 # ✅ Rota oficial para listar todos os participantes
+
+@app.put("/users/update")
+async def atualizar_usuario(
+    email: str = Form(...),
+    bio: str = Form(...),
+    status: str = Form(...),
+    fotos: list[UploadFile] = File(None)
+):
+    db = SessionLocal()
+    usuario = db.query(Usuario).filter(Usuario.email == email).first()
+
+    if not usuario:
+        db.close()
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    usuario.bio = bio
+    usuario.status = status
+
+    if fotos:
+        nomes_imagens = []
+        for foto in fotos:
+            caminho = os.path.join(UPLOAD_FOLDER, foto.filename)
+            with open(caminho, "wb") as buffer:
+                buffer.write(await foto.read())
+            nomes_imagens.append(foto.filename)
+        # Adiciona novas fotos às existentes
+        fotos_existentes = usuario.fotos.split(",") if usuario.fotos else []
+        usuario.fotos = ",".join(fotos_existentes + nomes_imagens)
+
+    db.commit()
+    db.refresh(usuario)
+    db.close()
+
+    return {"message": "Perfil atualizado com sucesso!"}
 
 @app.get("/users/list")
 def listar_usuarios():
