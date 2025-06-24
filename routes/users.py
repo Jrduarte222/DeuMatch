@@ -1,16 +1,19 @@
- # app/routes/users.py - múltiplas fotos com timestamp para evitar sobreposição
+# app/routes/users.py
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
 import os, shutil, time
 
+from ..database import get_db
+from ..models import User as DBUser
+
 router = APIRouter()
 
-fake_users_db = []
 UPLOAD_DIR = "static"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-class User(BaseModel):
+class UserSchema(BaseModel):
     id: int
     name: str
     email: str
@@ -21,40 +24,44 @@ class User(BaseModel):
     foto2: Optional[str] = None
     galeria: Optional[List[str]] = []
 
-@router.post("/register")
+    class Config:
+        orm_mode = True
+
+# POST /users/register
+@router.post("/users/register")
 async def register_user(
     id: int = Form(...),
     name: str = Form(...),
     email: str = Form(...),
     role: str = Form(...),
-    bio: Optional[str] = Form(...),
+    bio: Optional[str] = Form(None),
     status: Optional[str] = Form("disponível"),
-    fotos: List[UploadFile] = File(...)
+    fotos: List[UploadFile] = File(...),
+    db: Session = Depends(get_db)
 ):
-    for u in fake_users_db:
-        if u.email == email:
-            raise HTTPException(status_code=400, detail="Email já registrado")
+    existing_user = db.query(DBUser).filter(DBUser.email == email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email já registrado")
 
     foto1 = None
     foto2 = None
     galeria = []
 
-    if fotos:
-        timestamp = str(int(time.time()))
-        for index, foto in enumerate(fotos):
-            ext = foto.filename.split(".")[-1]
-            filename = f"{id}_{index + 1}_{timestamp}.{ext}"
-            file_path = os.path.join(UPLOAD_DIR, filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(foto.file, buffer)
-            if index == 0:
-                foto1 = filename
-            elif index == 1:
-                foto2 = filename
-            else:
-                galeria.append(filename)
+    timestamp = str(int(time.time()))
+    for index, foto in enumerate(fotos):
+        ext = foto.filename.split(".")[-1]
+        filename = f"{id}_{index+1}_{timestamp}.{ext}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(foto.file, buffer)
+        if index == 0:
+            foto1 = filename
+        elif index == 1:
+            foto2 = filename
+        else:
+            galeria.append(filename)
 
-    user = User(
+    user = DBUser(
         id=id,
         name=name,
         email=email,
@@ -63,49 +70,54 @@ async def register_user(
         status=status,
         foto1=foto1,
         foto2=foto2,
-        galeria=galeria
+        galeria=",".join(galeria)
     )
-    fake_users_db.append(user)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return {"message": "Usuário registrado com sucesso", "user": user}
-from fastapi import UploadFile, File, Form
 
-@router.put("/update")
+# PUT /users/update/{id}
+@router.put("/users/update/{id}")
 async def update_user(
+    id: int,
     email: str = Form(...),
     bio: Optional[str] = Form(None),
     status: Optional[str] = Form(None),
-    fotos: Optional[List[UploadFile]] = File(None)
+    fotos: Optional[List[UploadFile]] = File(None),
+    db: Session = Depends(get_db)
 ):
-    for user in fake_users_db:
-        if user.email == email:
-            if bio:
-                user.bio = bio
-            if status:
-                user.status = status
+    user = db.query(DBUser).filter(DBUser.id == id, DBUser.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
-            galeria = []
-            if fotos:
-                timestamp = str(int(time.time()))
-                for index, foto in enumerate(fotos):
-                    ext = foto.filename.split(".")[-1]
-                    filename = f"{user.id}_u{index+1}_{timestamp}.{ext}"
-                    file_path = os.path.join(UPLOAD_DIR, filename)
-                    with open(file_path, "wb") as buffer:
-                        shutil.copyfileobj(foto.file, buffer)
-                    galeria.append(filename)
+    if bio:
+        user.bio = bio
+    if status:
+        user.status = status
 
-                # Atualiza as fotos, mantendo as 2 primeiras como públicas
-                user.foto1 = galeria[0] if len(galeria) > 0 else user.foto1
-                user.foto2 = galeria[1] if len(galeria) > 1 else user.foto2
-                user.galeria = galeria[2:] if len(galeria) > 2 else []
+    if fotos:
+        galeria = []
+        timestamp = str(int(time.time()))
+        for index, foto in enumerate(fotos):
+            ext = foto.filename.split(".")[-1]
+            filename = f"{id}_u{index+1}_{timestamp}.{ext}"
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            with open(filepath, "wb") as buffer:
+                shutil.copyfileobj(foto.file, buffer)
+            galeria.append(filename)
 
-            return {"message": "Perfil atualizado com sucesso", "user": user}
+        user.foto1 = galeria[0] if len(galeria) > 0 else user.foto1
+        user.foto2 = galeria[1] if len(galeria) > 1 else user.foto2
+        user.galeria = ",".join(galeria[2:]) if len(galeria) > 2 else ""
 
-    raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    db.commit()
+    db.refresh(user)
+    return {"message": "Perfil atualizado com sucesso", "user": user}
 
-
-@router.get("/list")
-async def list_users(role: Optional[str] = None):
+# GET /users/list
+@router.get("/users/list", response_model=List[UserSchema])
+async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
     if role:
-        return [u for u in fake_users_db if u.role == role]
-    return fake_users_db
+        return db.query(DBUser).filter(DBUser.role == role).all()
+    return db.query(DBUser).all()
