@@ -1,12 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import os
-from database import Base, engine, SessionLocal
-from models import User
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from fastapi import HTTPException
 from fastapi.staticfiles import StaticFiles
+from database import Base, engine, SessionLocal
+from models import User  # Corrigido: era Usuario
+import os
 
 app = FastAPI()
 
@@ -19,16 +17,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Criação automática das tabelas
+# Criação automática das tabelas no SQLite
 Base.metadata.create_all(bind=engine)
 
-# Diretório para imagens
+# Diretório onde as imagens serão salvas
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Expor imagens via rota /static/
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ✅ Rota raiz (home)
+# ✅ Rota raiz
 @app.get("/")
 def root():
     return {"status": "API Deu Match está ativa 🚀"}
@@ -52,13 +51,15 @@ async def register_user(
             buffer.write(await foto.read())
         nomes_imagens.append(foto.filename)
 
-    usuario = Usuario(
+    usuario = User(
         name=name,
         email=email,
         bio=bio,
         role=role,
         status=status,
-        fotos=",".join(nomes_imagens)
+        foto1=nomes_imagens[0] if len(nomes_imagens) > 0 else None,
+        foto2=nomes_imagens[1] if len(nomes_imagens) > 1 else None,
+        galeria=",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else ""
     )
 
     db.add(usuario)
@@ -68,17 +69,17 @@ async def register_user(
 
     return {"message": "Usuário registrado com sucesso!"}
 
-# ✅ Rota oficial para listar todos os participantes
-
-@app.put("/users/update")
+# ✅ Rota de atualização de participante
+@app.put("/users/update/{id}")
 async def atualizar_usuario(
+    id: int,
     email: str = Form(...),
     bio: str = Form(...),
     status: str = Form(...),
     fotos: list[UploadFile] = File(None)
 ):
     db = SessionLocal()
-    usuario = db.query(Usuario).filter(Usuario.email == email).first()
+    usuario = db.query(User).filter(User.id == id, User.email == email).first()
 
     if not usuario:
         db.close()
@@ -94,21 +95,22 @@ async def atualizar_usuario(
             with open(caminho, "wb") as buffer:
                 buffer.write(await foto.read())
             nomes_imagens.append(foto.filename)
-        # Adiciona novas fotos às existentes
-        fotos_existentes = usuario.fotos.split(",") if usuario.fotos else []
-        usuario.fotos = ",".join(fotos_existentes + nomes_imagens)
 
-    
+        usuario.foto1 = nomes_imagens[0] if len(nomes_imagens) > 0 else usuario.foto1
+        usuario.foto2 = nomes_imagens[1] if len(nomes_imagens) > 1 else usuario.foto2
+        usuario.galeria = ",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else ""
+
     db.commit()
     db.refresh(usuario)
     db.close()
 
     return {"message": "Perfil atualizado com sucesso!"}
 
+# ✅ Rota para listar usuários (com ou sem filtro de role futuramente)
 @app.get("/users/list")
 def listar_usuarios():
     db = SessionLocal()
-    usuarios = db.query(Usuario).all()
+    usuarios = db.query(User).all()
     db.close()
 
     usuarios_serializados = []
