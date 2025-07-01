@@ -1,5 +1,5 @@
 # app/routes/users.py
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from ..models import User as DBUser
 
 router = APIRouter()
 
-UPLOAD_DIR = "static"
+UPLOAD_DIR = "static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class UserSchema(BaseModel):
@@ -118,6 +118,34 @@ async def update_user(
 # GET /users/list
 @router.get("/users/list", response_model=List[UserSchema])
 async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(DBUser)
     if role:
-        return db.query(DBUser).filter(DBUser.role == role).all()
-    return db.query(DBUser).all()
+        query = query.filter(DBUser.role == role)
+    return query.filter(DBUser.status != "suspenso").all()
+
+
+# --------------------------
+# POST /admin/suspend/{id}
+# --------------------------
+@router.post("/admin/suspend/{id}")
+def suspender_usuario(id: int, db: Session = Depends(get_db)):
+    user = db.query(DBUser).filter(DBUser.id == id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    user.status = "suspenso"
+    db.commit()
+    return {"message": "Usuário suspenso com sucesso"}
+
+# --------------------------
+# DELETE /admin/delete/{id}
+# --------------------------
+@router.delete("/admin/delete/{id}")
+def excluir_usuario(id: int, db: Session = Depends(get_db)):
+    user = db.query(DBUser).filter(DBUser.id == id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    db.delete(user)
+    db.commit()
+    return {"message": "Usuário excluído com sucesso"}
