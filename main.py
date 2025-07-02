@@ -4,9 +4,12 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from database import Base, engine, SessionLocal
 from models import User  # Corrigido: era Usuario
+from routes import users
 import os
 
 app = FastAPI()
+
+app.include_router(users.router)
 
 # CORS liberado (para conectar com frontend)
 app.add_middleware(

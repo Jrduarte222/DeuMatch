@@ -145,7 +145,13 @@ def excluir_usuario(id: int, db: Session = Depends(get_db)):
     user = db.query(DBUser).filter(DBUser.id == id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    
+
     db.delete(user)
     db.commit()
+    
+    # Verifica se realmente foi excluído
+    user_check = db.query(DBUser).filter(DBUser.id == id).first()
+    if user_check:
+        raise HTTPException(status_code=500, detail="Erro: usuário não foi excluído")
+
     return {"message": "Usuário excluído com sucesso"}
