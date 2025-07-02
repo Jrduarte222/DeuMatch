@@ -5,8 +5,8 @@ from typing import Optional, List
 from pydantic import BaseModel
 import os, shutil, time
 
-from ..database import get_db
-from ..models import User as DBUser
+from database import get_db
+from models import User as DBUser
 
 router = APIRouter()
 
