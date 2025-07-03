@@ -168,13 +168,3 @@ def limpar_usuarios(db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Todos os usuários foram removidos do banco."}
 
-from sqlalchemy import text  # coloque no topo do arquivo, se ainda não tiver
-
-@router.get("/admin/criar-video-coluna")
-def criar_coluna_video(db: Session = Depends(get_db)):
-    try:
-        db.execute(text("ALTER TABLE usuarios ADD COLUMN video VARCHAR"))
-        db.commit()
-        return {"message": "Coluna 'video' criada com sucesso"}
-    except Exception as e:
-        return {"error": str(e)}
