@@ -167,3 +167,12 @@ def limpar_usuarios(db: Session = Depends(get_db)):
     db.query(DBUser).delete()
     db.commit()
     return {"message": "Todos os usuários foram removidos do banco."}
+
+@router.get("/admin/criar-video-coluna")
+def criar_coluna_video(db: Session = Depends(get_db)):
+    try:
+        db.execute("ALTER TABLE usuarios ADD COLUMN video VARCHAR")
+        db.commit()
+        return {"message": "Coluna 'video' criada com sucesso"}
+    except Exception as e:
+        return {"error": str(e)}
