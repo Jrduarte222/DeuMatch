@@ -3,39 +3,40 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from database import Base, engine, SessionLocal
-from models import User  # Corrigido: era Usuario
+from models import User
 from routes import users
 import os
+import time
 
 app = FastAPI()
 
 app.include_router(users.router)
 
-# CORS liberado (para conectar com frontend)
+# CORS liberado
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # depois restrinja para segurança
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Criação automática das tabelas no SQLite
+# Criação das tabelas
 Base.metadata.create_all(bind=engine)
 
-# Diretório onde as imagens serão salvas
+# Diretório de uploads
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Expor imagens via rota /static/
+# Servir arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ✅ Rota raiz
+# Rota raiz
 @app.get("/")
 def root():
     return {"status": "API Deu Match está ativa 🚀"}
 
-# ✅ Rota de registro de participante
+# Rota de registro
 @app.post("/users/register")
 async def register_user(
     name: str = Form(...),
@@ -48,11 +49,13 @@ async def register_user(
     db = SessionLocal()
     nomes_imagens = []
 
-    for foto in fotos:
-        caminho = os.path.join(UPLOAD_FOLDER, foto.filename)
+    for index, foto in enumerate(fotos):
+        ext = foto.filename.split('.')[-1]
+        filename = f"{int(time.time())}_{index}.{ext}"
+        caminho = os.path.join(UPLOAD_FOLDER, filename)
         with open(caminho, "wb") as buffer:
             buffer.write(await foto.read())
-        nomes_imagens.append(foto.filename)
+        nomes_imagens.append(filename)
 
     usuario = User(
         name=name,
@@ -72,7 +75,7 @@ async def register_user(
 
     return {"message": "Usuário registrado com sucesso!"}
 
-# ✅ Rota de atualização de participante
+# Rota de atualização
 @app.put("/users/update/{id}")
 async def atualizar_usuario(
     id: int,
@@ -93,11 +96,13 @@ async def atualizar_usuario(
 
     if fotos:
         nomes_imagens = []
-        for foto in fotos:
-            caminho = os.path.join(UPLOAD_FOLDER, foto.filename)
+        for index, foto in enumerate(fotos):
+            ext = foto.filename.split('.')[-1]
+            filename = f"{int(time.time())}_{index}.{ext}"
+            caminho = os.path.join(UPLOAD_FOLDER, filename)
             with open(caminho, "wb") as buffer:
                 buffer.write(await foto.read())
-            nomes_imagens.append(foto.filename)
+            nomes_imagens.append(filename)
 
         usuario.foto1 = nomes_imagens[0] if len(nomes_imagens) > 0 else usuario.foto1
         usuario.foto2 = nomes_imagens[1] if len(nomes_imagens) > 1 else usuario.foto2
@@ -109,7 +114,7 @@ async def atualizar_usuario(
 
     return {"message": "Perfil atualizado com sucesso!"}
 
-# ✅ Rota para listar usuários (com ou sem filtro de role futuramente)
+# Rota para listar
 @app.get("/users/list")
 def listar_usuarios():
     db = SessionLocal()

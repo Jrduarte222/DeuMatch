@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 import os, shutil, time
 
 from database import get_db
@@ -24,13 +24,18 @@ class UserSchema(BaseModel):
     foto2: Optional[str] = None
     galeria: Optional[List[str]] = []
 
+    @validator("galeria", pre=True)
+    def split_galeria(cls, v):
+        if isinstance(v, str):
+            return v.split(",") if v else []
+        return v
+
     class Config:
-        orm_mode = True
+        from_attributes = True  # substitui orm_mode no Pydantic v2+
 
 # POST /users/register
 @router.post("/users/register")
 async def register_user(
-    id: int = Form(...),
     name: str = Form(...),
     email: str = Form(...),
     role: str = Form(...),
@@ -50,7 +55,7 @@ async def register_user(
     timestamp = str(int(time.time()))
     for index, foto in enumerate(fotos):
         ext = foto.filename.split(".")[-1]
-        filename = f"{id}_{index+1}_{timestamp}.{ext}"
+        filename = f"{int(time.time())}_{index}.{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(foto.file, buffer)
@@ -62,7 +67,6 @@ async def register_user(
             galeria.append(filename)
 
     user = DBUser(
-        id=id,
         name=name,
         email=email,
         role=role,
@@ -123,10 +127,7 @@ async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
         query = query.filter(DBUser.role == role)
     return query.filter(DBUser.status != "suspenso").all()
 
-
-# --------------------------
 # POST /admin/suspend/{id}
-# --------------------------
 @router.post("/admin/suspend/{id}")
 def suspender_usuario(id: int, db: Session = Depends(get_db)):
     user = db.query(DBUser).filter(DBUser.id == id).first()
@@ -137,9 +138,7 @@ def suspender_usuario(id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Usuário suspenso com sucesso"}
 
-# --------------------------
 # DELETE /admin/delete/{id}
-# --------------------------
 @router.delete("/admin/delete/{id}")
 def excluir_usuario(id: int, db: Session = Depends(get_db)):
     user = db.query(DBUser).filter(DBUser.id == id).first()
@@ -148,10 +147,4 @@ def excluir_usuario(id: int, db: Session = Depends(get_db)):
 
     db.delete(user)
     db.commit()
-    
-    # Verifica se realmente foi excluído
-    user_check = db.query(DBUser).filter(DBUser.id == id).first()
-    if user_check:
-        raise HTTPException(status_code=500, detail="Erro: usuário não foi excluído")
-
     return {"message": "Usuário excluído com sucesso"}
