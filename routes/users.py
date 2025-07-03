@@ -148,3 +148,9 @@ def excluir_usuario(id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": "Usuário excluído com sucesso"}
+
+@router.post("/admin/limpar-tudo")
+def limpar_usuarios(db: Session = Depends(get_db)):
+    db.query(DBUser).delete()
+    db.commit()
+    return {"message": "Todos os usuários foram removidos do banco."}
