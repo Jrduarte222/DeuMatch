@@ -4,12 +4,14 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from database import Base, engine, SessionLocal
 from models import User
+from routes import users
 import os
-import time
+import cloudinary.uploader
+from cloudinary_config import *
 
 app = FastAPI()
 
-# CORS liberado para frontend
+# CORS liberado
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,55 +20,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Criação automática das tabelas no novo banco
+# Criação das tabelas no banco
 Base.metadata.create_all(bind=engine)
 
-# Diretório de uploads
+# Inclui as rotas externas (se houver)
+app.include_router(users.router)
+
+# Diretório de compatibilidade para arquivos estáticos (não mais usado com Cloudinary)
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Servir arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Rota raiz
+# Rota de status
 @app.get("/")
 def root():
-    return {"status": "API Deu Match está ativa 🚀"}
+    return {"status": "API Deu Match está ativa com Cloudinary 🚀"}
 
-# Rota de registro com vídeo
+# Rota de registro de usuários
 @app.post("/users/register")
 async def register_user(
-    id: int = Form(...),
     name: str = Form(...),
     email: str = Form(...),
     bio: str = Form(...),
     role: str = Form(...),
     status: str = Form(...),
     fotos: list[UploadFile] = File(...),
-    video: UploadFile = File(None)  # NOVO
+    video: UploadFile = File(None)
 ):
     db = SessionLocal()
     nomes_imagens = []
 
-    for index, foto in enumerate(fotos):
-        ext = foto.filename.split('.')[-1]
-        filename = f"{int(time.time())}_{index}.{ext}"
-        caminho = os.path.join(UPLOAD_FOLDER, filename)
-        with open(caminho, "wb") as buffer:
-            buffer.write(await foto.read())
-        nomes_imagens.append(filename)
+    # Upload das fotos para o Cloudinary
+    for foto in fotos:
+        result = cloudinary.uploader.upload(await foto.read(), folder="deumatch/fotos")
+        nomes_imagens.append(result['secure_url'])
 
-    # Salvar vídeo
-    video_filename = None
+    # Upload do vídeo para o Cloudinary
+    video_url = None
     if video:
-        ext = video.filename.split('.')[-1]
-        video_filename = f"{int(time.time())}_video.{ext}"
-        caminho_video = os.path.join(UPLOAD_FOLDER, video_filename)
-        with open(caminho_video, "wb") as buffer:
-            buffer.write(await video.read())
+        video_result = cloudinary.uploader.upload(await video.read(), folder="deumatch/videos", resource_type="video")
+        video_url = video_result['secure_url']
 
+    # Criação do usuário no banco
     usuario = User(
-        id=id,
         name=name,
         email=email,
         bio=bio,
@@ -75,7 +71,7 @@ async def register_user(
         foto1=nomes_imagens[0] if len(nomes_imagens) > 0 else None,
         foto2=nomes_imagens[1] if len(nomes_imagens) > 1 else None,
         galeria=",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else "",
-        video=video_filename
+        video=video_url
     )
 
     db.add(usuario)
@@ -85,14 +81,15 @@ async def register_user(
 
     return {"message": "Usuário registrado com sucesso!"}
 
-# Rota de atualização
+# Rota de atualização de perfil
 @app.put("/users/update/{id}")
 async def atualizar_usuario(
     id: int,
     email: str = Form(...),
     bio: str = Form(...),
     status: str = Form(...),
-    fotos: list[UploadFile] = File(None)
+    fotos: list[UploadFile] = File(None),
+    video: UploadFile = File(None)
 ):
     db = SessionLocal()
     usuario = db.query(User).filter(User.id == id, User.email == email).first()
@@ -104,19 +101,21 @@ async def atualizar_usuario(
     usuario.bio = bio
     usuario.status = status
 
+    # Upload das novas fotos no Cloudinary
     if fotos:
         nomes_imagens = []
-        for index, foto in enumerate(fotos):
-            ext = foto.filename.split('.')[-1]
-            filename = f"{int(time.time())}_{index}.{ext}"
-            caminho = os.path.join(UPLOAD_FOLDER, filename)
-            with open(caminho, "wb") as buffer:
-                buffer.write(await foto.read())
-            nomes_imagens.append(filename)
+        for foto in fotos:
+            result = cloudinary.uploader.upload(await foto.read(), folder="deumatch/fotos")
+            nomes_imagens.append(result["secure_url"])
 
         usuario.foto1 = nomes_imagens[0] if len(nomes_imagens) > 0 else usuario.foto1
         usuario.foto2 = nomes_imagens[1] if len(nomes_imagens) > 1 else usuario.foto2
-        usuario.galeria = ",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else ""
+        usuario.galeria = ",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else usuario.galeria
+
+    # Upload de novo vídeo
+    if video:
+        result = cloudinary.uploader.upload(await video.read(), folder="deumatch/videos", resource_type="video")
+        usuario.video = result["secure_url"]
 
     db.commit()
     db.refresh(usuario)
@@ -124,7 +123,7 @@ async def atualizar_usuario(
 
     return {"message": "Perfil atualizado com sucesso!"}
 
-# Rota para listar usuários
+# Rota para listar todos os usuários
 @app.get("/users/list")
 def listar_usuarios():
     db = SessionLocal()
