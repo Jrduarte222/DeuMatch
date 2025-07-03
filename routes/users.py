@@ -13,6 +13,7 @@ router = APIRouter()
 UPLOAD_DIR = "static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# === SCHEMA DE RETORNO ===
 class UserSchema(BaseModel):
     id: int
     name: str
@@ -23,6 +24,7 @@ class UserSchema(BaseModel):
     foto1: Optional[str] = None
     foto2: Optional[str] = None
     galeria: Optional[List[str]] = []
+    video: Optional[str] = None
 
     @validator("galeria", pre=True)
     def split_galeria(cls, v):
@@ -31,17 +33,19 @@ class UserSchema(BaseModel):
         return v
 
     class Config:
-        from_attributes = True  # substitui orm_mode no Pydantic v2+
+        from_attributes = True  # Pydantic v2+
 
-# POST /users/register
+# === CADASTRO COM FOTOS E VÍDEO ===
 @router.post("/users/register")
 async def register_user(
+    id: int = Form(...),
     name: str = Form(...),
     email: str = Form(...),
     role: str = Form(...),
     bio: Optional[str] = Form(None),
     status: Optional[str] = Form("disponível"),
     fotos: List[UploadFile] = File(...),
+    video: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
     existing_user = db.query(DBUser).filter(DBUser.email == email).first()
@@ -55,7 +59,7 @@ async def register_user(
     timestamp = str(int(time.time()))
     for index, foto in enumerate(fotos):
         ext = foto.filename.split(".")[-1]
-        filename = f"{int(time.time())}_{index}.{ext}"
+        filename = f"{timestamp}_{index}.{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(foto.file, buffer)
@@ -66,7 +70,16 @@ async def register_user(
         else:
             galeria.append(filename)
 
+    video_filename = None
+    if video:
+        video_ext = video.filename.split(".")[-1]
+        video_filename = f"{timestamp}_video.{video_ext}"
+        video_path = os.path.join(UPLOAD_DIR, video_filename)
+        with open(video_path, "wb") as buffer:
+            shutil.copyfileobj(video.file, buffer)
+
     user = DBUser(
+        id=id,
         name=name,
         email=email,
         role=role,
@@ -74,14 +87,15 @@ async def register_user(
         status=status,
         foto1=foto1,
         foto2=foto2,
-        galeria=",".join(galeria)
+        galeria=",".join(galeria),
+        video=video_filename
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     return {"message": "Usuário registrado com sucesso", "user": user}
 
-# PUT /users/update/{id}
+# === ATUALIZAR PERFIL ===
 @router.put("/users/update/{id}")
 async def update_user(
     id: int,
@@ -119,7 +133,7 @@ async def update_user(
     db.refresh(user)
     return {"message": "Perfil atualizado com sucesso", "user": user}
 
-# GET /users/list
+# === LISTAR USUÁRIOS ===
 @router.get("/users/list", response_model=List[UserSchema])
 async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(DBUser)
@@ -127,28 +141,27 @@ async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
         query = query.filter(DBUser.role == role)
     return query.filter(DBUser.status != "suspenso").all()
 
-# POST /admin/suspend/{id}
+# === SUSPENDER USUÁRIO ===
 @router.post("/admin/suspend/{id}")
 def suspender_usuario(id: int, db: Session = Depends(get_db)):
     user = db.query(DBUser).filter(DBUser.id == id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    
     user.status = "suspenso"
     db.commit()
     return {"message": "Usuário suspenso com sucesso"}
 
-# DELETE /admin/delete/{id}
+# === EXCLUIR USUÁRIO ===
 @router.delete("/admin/delete/{id}")
 def excluir_usuario(id: int, db: Session = Depends(get_db)):
     user = db.query(DBUser).filter(DBUser.id == id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
-
     db.delete(user)
     db.commit()
     return {"message": "Usuário excluído com sucesso"}
 
+# === EXCLUIR TODOS OS USUÁRIOS ===
 @router.post("/admin/limpar-tudo")
 def limpar_usuarios(db: Session = Depends(get_db)):
     db.query(DBUser).delete()
