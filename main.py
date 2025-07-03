@@ -11,6 +11,8 @@ from cloudinary_config import *
 
 app = FastAPI()
 
+app.include_router(users.router)
+
 # CORS liberado
 app.add_middleware(
     CORSMiddleware,
@@ -20,23 +22,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Criação das tabelas no banco
+# Criação das tabelas
 Base.metadata.create_all(bind=engine)
 
-# Inclui as rotas externas (se houver)
-app.include_router(users.router)
-
-# Diretório de compatibilidade para arquivos estáticos (não mais usado com Cloudinary)
-UPLOAD_FOLDER = "static/uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Servir arquivos estáticos (mantido para compatibilidade)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Rota de status
 @app.get("/")
 def root():
     return {"status": "API Deu Match está ativa com Cloudinary 🚀"}
 
-# Rota de registro de usuários
+# Rota de registro
 @app.post("/users/register")
 async def register_user(
     name: str = Form(...),
@@ -50,18 +46,15 @@ async def register_user(
     db = SessionLocal()
     nomes_imagens = []
 
-    # Upload das fotos para o Cloudinary
     for foto in fotos:
         result = cloudinary.uploader.upload(await foto.read(), folder="deumatch/fotos")
         nomes_imagens.append(result['secure_url'])
 
-    # Upload do vídeo para o Cloudinary
     video_url = None
     if video:
         video_result = cloudinary.uploader.upload(await video.read(), folder="deumatch/videos", resource_type="video")
         video_url = video_result['secure_url']
 
-    # Criação do usuário no banco
     usuario = User(
         name=name,
         email=email,
@@ -81,7 +74,7 @@ async def register_user(
 
     return {"message": "Usuário registrado com sucesso!"}
 
-# Rota de atualização de perfil
+# Rota de atualização
 @app.put("/users/update/{id}")
 async def atualizar_usuario(
     id: int,
@@ -101,21 +94,19 @@ async def atualizar_usuario(
     usuario.bio = bio
     usuario.status = status
 
-    # Upload das novas fotos no Cloudinary
     if fotos:
         nomes_imagens = []
         for foto in fotos:
             result = cloudinary.uploader.upload(await foto.read(), folder="deumatch/fotos")
-            nomes_imagens.append(result["secure_url"])
+            nomes_imagens.append(result['secure_url'])
 
         usuario.foto1 = nomes_imagens[0] if len(nomes_imagens) > 0 else usuario.foto1
         usuario.foto2 = nomes_imagens[1] if len(nomes_imagens) > 1 else usuario.foto2
         usuario.galeria = ",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else usuario.galeria
 
-    # Upload de novo vídeo
     if video:
         result = cloudinary.uploader.upload(await video.read(), folder="deumatch/videos", resource_type="video")
-        usuario.video = result["secure_url"]
+        usuario.video = result['secure_url']
 
     db.commit()
     db.refresh(usuario)
@@ -123,7 +114,7 @@ async def atualizar_usuario(
 
     return {"message": "Perfil atualizado com sucesso!"}
 
-# Rota para listar todos os usuários
+# Rota para listar
 @app.get("/users/list")
 def listar_usuarios():
     db = SessionLocal()
@@ -134,6 +125,8 @@ def listar_usuarios():
     for usuario in usuarios:
         user_dict = usuario.__dict__.copy()
         user_dict.pop("_sa_instance_state", None)
+        if user_dict.get("galeria"):
+            user_dict["galeria"] = user_dict["galeria"].split(",") if user_dict["galeria"] else []
         usuarios_serializados.append(user_dict)
 
     return JSONResponse(content=usuarios_serializados)
