@@ -4,15 +4,12 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from database import Base, engine, SessionLocal
 from models import User
-from routes import users
 import os
 import time
 
 app = FastAPI()
 
-app.include_router(users.router)
-
-# CORS liberado
+# CORS liberado para frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Criação das tabelas
+# Criação automática das tabelas no novo banco
 Base.metadata.create_all(bind=engine)
 
 # Diretório de uploads
@@ -36,15 +33,17 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 def root():
     return {"status": "API Deu Match está ativa 🚀"}
 
-# Rota de registro
+# Rota de registro com vídeo
 @app.post("/users/register")
 async def register_user(
+    id: int = Form(...),
     name: str = Form(...),
     email: str = Form(...),
     bio: str = Form(...),
     role: str = Form(...),
     status: str = Form(...),
-    fotos: list[UploadFile] = File(...)
+    fotos: list[UploadFile] = File(...),
+    video: UploadFile = File(None)  # NOVO
 ):
     db = SessionLocal()
     nomes_imagens = []
@@ -57,7 +56,17 @@ async def register_user(
             buffer.write(await foto.read())
         nomes_imagens.append(filename)
 
+    # Salvar vídeo
+    video_filename = None
+    if video:
+        ext = video.filename.split('.')[-1]
+        video_filename = f"{int(time.time())}_video.{ext}"
+        caminho_video = os.path.join(UPLOAD_FOLDER, video_filename)
+        with open(caminho_video, "wb") as buffer:
+            buffer.write(await video.read())
+
     usuario = User(
+        id=id,
         name=name,
         email=email,
         bio=bio,
@@ -65,7 +74,8 @@ async def register_user(
         status=status,
         foto1=nomes_imagens[0] if len(nomes_imagens) > 0 else None,
         foto2=nomes_imagens[1] if len(nomes_imagens) > 1 else None,
-        galeria=",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else ""
+        galeria=",".join(nomes_imagens[2:]) if len(nomes_imagens) > 2 else "",
+        video=video_filename
     )
 
     db.add(usuario)
@@ -114,7 +124,7 @@ async def atualizar_usuario(
 
     return {"message": "Perfil atualizado com sucesso!"}
 
-# Rota para listar
+# Rota para listar usuários
 @app.get("/users/list")
 def listar_usuarios():
     db = SessionLocal()
