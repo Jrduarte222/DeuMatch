@@ -22,8 +22,6 @@ app.add_middleware(
 # Criação automática das tabelas
 Base.metadata.create_all(bind=engine)
 
-# Servir arquivos estáticos (opcional)
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Rota raiz de verificação
 @app.get("/")
