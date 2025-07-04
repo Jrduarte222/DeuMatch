@@ -50,7 +50,6 @@ class UserSchema(BaseModel):
 # === CADASTRO COM FOTOS E VÍDEO ===
 @router.post("/users/register")
 async def register_user(
-    
     name: str = Form(...),
     email: str = Form(...),
     role: str = Form(...),
@@ -82,7 +81,6 @@ async def register_user(
         video_url = upload_to_cloudinary(video)
 
     user = DBUser(
-        id=id,
         name=name,
         email=email,
         role=role,
