@@ -50,7 +50,7 @@ class UserSchema(BaseModel):
 # === CADASTRO COM FOTOS E VÍDEO ===
 @router.post("/users/register")
 async def register_user(
-    id: int = Form(...),
+    
     name: str = Form(...),
     email: str = Form(...),
     role: str = Form(...),
