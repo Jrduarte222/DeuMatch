@@ -3,15 +3,27 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel, validator
-import os, shutil, time
+import cloudinary.uploader
+import cloudinary
+import time
+import os
 
 from database import get_db
 from models import User as DBUser
 
 router = APIRouter()
 
-UPLOAD_DIR = "static/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# === CONFIG CLOUDINARY ===
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
+)
+
+# === FUNÇÃO DE UPLOAD ===
+def upload_to_cloudinary(file: UploadFile, folder: str = "usuarios"):
+    result = cloudinary.uploader.upload(file.file, folder=folder, resource_type="auto")
+    return result["secure_url"]
 
 # === SCHEMA DE RETORNO ===
 class UserSchema(BaseModel):
@@ -33,7 +45,7 @@ class UserSchema(BaseModel):
         return v
 
     class Config:
-        from_attributes = True  # Pydantic v2+
+        from_attributes = True
 
 # === CADASTRO COM FOTOS E VÍDEO ===
 @router.post("/users/register")
@@ -56,27 +68,18 @@ async def register_user(
     foto2 = None
     galeria = []
 
-    timestamp = str(int(time.time()))
     for index, foto in enumerate(fotos):
-        ext = foto.filename.split(".")[-1]
-        filename = f"{timestamp}_{index}.{ext}"
-        filepath = os.path.join(UPLOAD_DIR, filename)
-        with open(filepath, "wb") as buffer:
-            shutil.copyfileobj(foto.file, buffer)
+        url = upload_to_cloudinary(foto)
         if index == 0:
-            foto1 = filename
+            foto1 = url
         elif index == 1:
-            foto2 = filename
+            foto2 = url
         else:
-            galeria.append(filename)
+            galeria.append(url)
 
-    video_filename = None
+    video_url = None
     if video:
-        video_ext = video.filename.split(".")[-1]
-        video_filename = f"{timestamp}_video.{video_ext}"
-        video_path = os.path.join(UPLOAD_DIR, video_filename)
-        with open(video_path, "wb") as buffer:
-            shutil.copyfileobj(video.file, buffer)
+        video_url = upload_to_cloudinary(video)
 
     user = DBUser(
         id=id,
@@ -88,7 +91,7 @@ async def register_user(
         foto1=foto1,
         foto2=foto2,
         galeria=",".join(galeria),
-        video=video_filename
+        video=video_url
     )
     db.add(user)
     db.commit()
@@ -116,18 +119,15 @@ async def update_user(
 
     if fotos:
         galeria = []
-        timestamp = str(int(time.time()))
         for index, foto in enumerate(fotos):
-            ext = foto.filename.split(".")[-1]
-            filename = f"{id}_u{index+1}_{timestamp}.{ext}"
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            with open(filepath, "wb") as buffer:
-                shutil.copyfileobj(foto.file, buffer)
-            galeria.append(filename)
-
-        user.foto1 = galeria[0] if len(galeria) > 0 else user.foto1
-        user.foto2 = galeria[1] if len(galeria) > 1 else user.foto2
-        user.galeria = ",".join(galeria[2:]) if len(galeria) > 2 else ""
+            url = upload_to_cloudinary(foto)
+            if index == 0:
+                user.foto1 = url
+            elif index == 1:
+                user.foto2 = url
+            else:
+                galeria.append(url)
+        user.galeria = ",".join(galeria) if galeria else ""
 
     db.commit()
     db.refresh(user)
@@ -167,4 +167,3 @@ def limpar_usuarios(db: Session = Depends(get_db)):
     db.query(DBUser).delete()
     db.commit()
     return {"message": "Todos os usuários foram removidos do banco."}
-
