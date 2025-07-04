@@ -2,6 +2,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, List
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
@@ -35,3 +36,8 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
         salas[sala_id].remove(websocket)
         if not salas[sala_id]:
             del salas[sala_id]
+
+# NOVA ROTA: Retorna lista de salas ativas
+@app.get("/ws_status")
+async def ws_status():
+    return JSONResponse(content={"salas": list(salas.keys())})
