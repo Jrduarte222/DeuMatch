@@ -1,4 +1,5 @@
 # app/routes/users.py
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -47,12 +48,13 @@ class UserSchema(BaseModel):
     class Config:
         from_attributes = True
 
-# === CADASTRO COM FOTOS E VÍDEO ===
+# === CADASTRO COM SENHA, FOTOS E VÍDEO ===
 @router.post("/users/register")
 async def register_user(
     name: str = Form(...),
     email: str = Form(...),
     role: str = Form(...),
+    senha: Optional[str] = Form(None),
     bio: Optional[str] = Form(None),
     status: Optional[str] = Form("disponível"),
     fotos: List[UploadFile] = File(...),
@@ -76,14 +78,13 @@ async def register_user(
         else:
             galeria.append(url)
 
-    video_url = None
-    if video:
-        video_url = upload_to_cloudinary(video)
+    video_url = upload_to_cloudinary(video) if video else None
 
     user = DBUser(
         name=name,
         email=email,
         role=role,
+        senha=senha,
         bio=bio,
         status=status,
         foto1=foto1,
@@ -96,13 +97,28 @@ async def register_user(
     db.refresh(user)
     return {"message": "Usuário registrado com sucesso", "user": user}
 
-# === ATUALIZAR PERFIL ===
+# === LOGIN SIMPLES ===
+@router.post("/users/login")
+def login_user(
+    email: str = Form(...),
+    senha: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(DBUser).filter(DBUser.email == email, DBUser.senha == senha).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+    if user.status == "suspenso":
+        raise HTTPException(status_code=403, detail="Usuário suspenso")
+    return {"message": "Login autorizado", "user": user}
+
+# === ATUALIZAR PERFIL (opcionalmente senha) ===
 @router.put("/users/update/{id}")
 async def update_user(
     id: int,
     email: str = Form(...),
     bio: Optional[str] = Form(None),
     status: Optional[str] = Form(None),
+    senha: Optional[str] = Form(None),
     fotos: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db)
 ):
@@ -114,6 +130,8 @@ async def update_user(
         user.bio = bio
     if status:
         user.status = status
+    if senha:
+        user.senha = senha
 
     if fotos:
         galeria = []

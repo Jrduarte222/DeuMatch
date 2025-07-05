@@ -1,13 +1,13 @@
 from sqlalchemy import Column, String, Text, BigInteger
 from database import Base
 
-
 class User(Base):
     __tablename__ = "usuarios"
 
     id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
+    senha = Column(String(100), nullable=False)  # ← campo adicionado
     role = Column(String(50), nullable=False)
     bio = Column(Text, nullable=True)
     status = Column(String(50), nullable=True)
