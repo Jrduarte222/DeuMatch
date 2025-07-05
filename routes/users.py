@@ -48,6 +48,10 @@ class UserSchema(BaseModel):
     class Config:
         from_attributes = True
 
+# === SCHEMA COM SENHA (usado internamente) ===
+class UserWithPasswordSchema(UserSchema):
+    senha: Optional[str] = None
+
 # === CADASTRO COM SENHA, FOTOS E VÍDEO ===
 @router.post("/users/register")
 async def register_user(
@@ -149,8 +153,8 @@ async def update_user(
     db.refresh(user)
     return {"message": "Perfil atualizado com sucesso", "user": user}
 
-# === LISTAR USUÁRIOS ===
-@router.get("/users/list", response_model=List[UserSchema])
+# === LISTAR USUÁRIOS (COM SENHA PARA USO INTERNO DO APP) ===
+@router.get("/users/list", response_model=List[UserWithPasswordSchema])
 async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(DBUser)
     if role:
