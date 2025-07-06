@@ -1,9 +1,13 @@
 import os
+from dotenv import load_dotenv  # ← adicionado
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Busca a variável DATABASE_URL do ambiente (Render)
+# Carrega variáveis do .env
+load_dotenv()  # ← adicionado
+
+# Busca a variável DATABASE_URL do ambiente
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
