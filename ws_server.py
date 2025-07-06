@@ -1,15 +1,19 @@
-# ws_server.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, List
+from typing import Dict
 from fastapi.responses import JSONResponse
 import asyncio
 import json
 import time
+import logging
 
 app = FastAPI()
 
-# Configuração CORS
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("WebRTC-Server")
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,108 +22,133 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Estrutura para gerenciar salas e conexões
-salas: Dict[str, Dict[str, WebSocket]] = {}  # { sala_id: { connection_id: websocket } }
-last_activity: Dict[str, float] = {}  # { connection_id: last_activity_timestamp }
+# Estruturas de dados
+salas: Dict[str, Dict[str, WebSocket]] = {}  # {sala_id: {connection_id: websocket}}
+connection_metadata: Dict[str, Dict] = {}    # {connection_id: {last_activity, sala_id, role}}
+
+HEARTBEAT_INTERVAL = 25
+CONNECTION_TIMEOUT = 90
 
 @app.websocket("/ws/{sala_id}")
 async def websocket_endpoint(websocket: WebSocket, sala_id: str):
     await websocket.accept()
     connection_id = f"{sala_id}_{time.time()}"
+    role = "viewer"
 
-    # Registrar nova conexão
+    # Registrar conexão
     if sala_id not in salas:
         salas[sala_id] = {}
     salas[sala_id][connection_id] = websocket
-    last_activity[connection_id] = time.time()
+    connection_metadata[connection_id] = {
+        "last_activity": time.time(),
+        "sala_id": sala_id,
+        "role": role
+    }
 
-    print(f"✅ Nova conexão: {connection_id} na sala {sala_id}")
+    logger.info(f"✅ Nova conexão: {connection_id}")
 
     try:
-        # Tarefa para enviar ping periodicamente
-        async def send_pings():
+        async def send_heartbeats():
             while True:
-                await asyncio.sleep(25)  # Ping a cada 25 segundos
-                if connection_id in last_activity:
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
+                if connection_id in connection_metadata:
                     try:
                         await websocket.send_text(json.dumps({"type": "ping"}))
                     except:
                         break
 
-        ping_task = asyncio.create_task(send_pings())
+        heartbeat_task = asyncio.create_task(send_heartbeats())
 
-        # Loop principal para receber mensagens
         while True:
             data = await websocket.receive_text()
-            last_activity[connection_id] = time.time()
+            connection_metadata[connection_id]["last_activity"] = time.time()
 
             try:
                 message = json.loads(data)
-                
-                # Ignorar pong/respostas de heartbeat
-                if message.get("type") in ["pong", "heartbeat"]:
-                    continue
-                    
-                print(f"📩 Mensagem recebida na sala {sala_id}: {data[:100]}...")
 
-                # Retransmitir para outros participantes da sala
-                for conn_id, conn in salas[sala_id].items():
-                    if conn_id != connection_id:
-                        try:
-                            await conn.send_text(data)
-                        except:
-                            continue
+                if message.get("type") == "pong":
+                    continue
+
+                # Definir transmissor
+                if message.get("type") == "register" and message.get("role") == "host":
+                    connection_metadata[connection_id]["role"] = "host"
+                    logger.info(f"🎥 {connection_id} registrado como HOST")
+                    continue
+
+                # Viewer entrou: notificar host
+                if message.get("type") == "viewer-join":
+                    host_id = next((cid for cid, meta in connection_metadata.items()
+                                    if meta["sala_id"] == sala_id and meta["role"] == "host"), None)
+                    if host_id and host_id in salas[sala_id]:
+                        await salas[sala_id][host_id].send_text(json.dumps({
+                            "type": "viewer-join",
+                            "viewerId": connection_id
+                        }))
+                    continue
+
+                # Mensagens direcionadas (offer, answer, candidate)
+                target_id = message.get("viewerId") or message.get("target")
+                if target_id and target_id in salas[sala_id]:
+                    await salas[sala_id][target_id].send_text(data)
+                    logger.info(f"➡️ Mensagem {message.get('type')} enviada para {target_id}")
+                else:
+                    logger.warning(f"⚠️ Destinatário {target_id} não encontrado")
 
             except json.JSONDecodeError:
-                print(f"⚠️ Mensagem inválida: {data}")
+                logger.error(f"⚠️ Mensagem inválida: {data[:200]}")
 
     except WebSocketDisconnect:
-        print(f"❌ Conexão fechada: {connection_id}")
+        logger.info(f"❌ Conexão fechada: {connection_id}")
     except Exception as e:
-        print(f"⚠️ Erro na conexão {connection_id}: {str(e)}")
+        logger.error(f"⚠️ Erro na conexão {connection_id}: {str(e)}")
     finally:
-        # Limpeza
-        ping_task.cancel()
+        if heartbeat_task:
+            heartbeat_task.cancel()
+
         if sala_id in salas and connection_id in salas[sala_id]:
             del salas[sala_id][connection_id]
             if not salas[sala_id]:
                 del salas[sala_id]
-        if connection_id in last_activity:
-            del last_activity[connection_id]
 
-# Rota para verificar conexões ativas
+        if connection_id in connection_metadata:
+            del connection_metadata[connection_id]
+
 @app.get("/ws_status")
-async def ws_status():
-    active_connections = sum(len(connections) for connections in salas.values())
+async def get_ws_status():
     return JSONResponse(content={
         "salas_ativas": list(salas.keys()),
-        "total_conexoes": active_connections,
-        "ultima_atividade": {k: time.ctime(v) for k, v in last_activity.items()}
+        "conexoes_ativas": sum(len(v) for v in salas.values()),
+        "ultimas_atividades": {
+            k: time.ctime(v["last_activity"])
+            for k, v in connection_metadata.items()
+        }
     })
 
-# Tarefa em background para limpar conexões inativas
+async def cleanup_inactive_connections():
+    while True:
+        await asyncio.sleep(60)
+        now = time.time()
+        inactive = [
+            cid for cid, meta in connection_metadata.items()
+            if now - meta["last_activity"] > CONNECTION_TIMEOUT
+        ]
+
+        for connection_id in inactive:
+            sala_id = connection_metadata[connection_id]["sala_id"]
+            if sala_id in salas and connection_id in salas[sala_id]:
+                try:
+                    await salas[sala_id][connection_id].close()
+                except:
+                    pass
+                del salas[sala_id][connection_id]
+                if not salas[sala_id]:
+                    del salas[sala_id]
+            if connection_id in connection_metadata:
+                del connection_metadata[connection_id]
+
+        if inactive:
+            logger.info(f"🧹 Limpeza: {len(inactive)} conexões inativas removidas")
+
 @app.on_event("startup")
 async def startup_event():
-    async def cleanup_inactive():
-        while True:
-            await asyncio.sleep(60)
-            now = time.time()
-            inactive = [cid for cid, last in last_activity.items() 
-                       if now - last > 90]  # 1.5min sem atividade
-            
-            for connection_id in inactive:
-                sala_id = connection_id.split("_")[0]
-                if sala_id in salas and connection_id in salas[sala_id]:
-                    try:
-                        await salas[sala_id][connection_id].close()
-                    except:
-                        pass
-                    del salas[sala_id][connection_id]
-                    if not salas[sala_id]:
-                        del salas[sala_id]
-                if connection_id in last_activity:
-                    del last_activity[connection_id]
-                
-            print(f"🧹 Limpeza: {len(inactive)} conexões inativas removidas")
-
-    asyncio.create_task(cleanup_inactive())
+    asyncio.create_task(cleanup_inactive_connections())
