@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict
 from fastapi.responses import JSONResponse
+from typing import Dict
 import asyncio
 import json
 import time
@@ -23,8 +23,9 @@ app.add_middleware(
 )
 
 # Estruturas de dados
-salas: Dict[str, Dict[str, WebSocket]] = {}  # {sala_id: {connection_id: websocket}}
-connection_metadata: Dict[str, Dict] = {}    # {connection_id: {last_activity, sala_id, role}}
+salas: Dict[str, Dict[str, WebSocket]] = {}
+connection_metadata: Dict[str, Dict] = {}  # connection_id -> {last_activity, sala_id, role}
+hosts_por_sala: Dict[str, str] = {}  # sala_id -> connection_id do host
 
 HEARTBEAT_INTERVAL = 25
 CONNECTION_TIMEOUT = 90
@@ -35,7 +36,6 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
     connection_id = f"{sala_id}_{time.time()}"
     role = "viewer"
 
-    # Registrar conexão
     if sala_id not in salas:
         salas[sala_id] = {}
     salas[sala_id][connection_id] = websocket
@@ -65,34 +65,39 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
 
             try:
                 message = json.loads(data)
+                msg_type = message.get("type")
 
-                if message.get("type") == "pong":
+                if msg_type == "pong":
                     continue
 
-                # Definir transmissor
-                if message.get("type") == "register" and message.get("role") == "host":
+                if msg_type == "register" and message.get("role") == "host":
                     connection_metadata[connection_id]["role"] = "host"
-                    logger.info(f"🎥 {connection_id} registrado como HOST")
+                    hosts_por_sala[sala_id] = connection_id
+                    logger.info(f"🎥 {connection_id} registrado como HOST para sala {sala_id}")
+                    print("HOSTS_ATIVOS:", hosts_por_sala)
                     continue
 
-                # Viewer entrou: notificar host
-                if message.get("type") == "viewer-join":
-                    host_id = next((cid for cid, meta in connection_metadata.items()
-                                    if meta["sala_id"] == sala_id and meta["role"] == "host"), None)
+                if msg_type == "viewer-join":
+                    host_id = hosts_por_sala.get(sala_id)
                     if host_id and host_id in salas[sala_id]:
                         await salas[sala_id][host_id].send_text(json.dumps({
                             "type": "viewer-join",
-                            "viewerId": connection_id
+                            "viewerId": message.get("viewerId", connection_id),
+                            "hostId": host_id
                         }))
                     continue
 
-                # Mensagens direcionadas (offer, answer, candidate)
-                target_id = message.get("viewerId") or message.get("target")
-                if target_id and target_id in salas[sala_id]:
+                target_id = None
+                if msg_type == "offer":
+                    target_id = message.get("viewerId")
+                elif msg_type in ["answer", "candidate"]:
+                    target_id = hosts_por_sala.get(sala_id)
+
+                if target_id and target_id in salas.get(sala_id, {}):
                     await salas[sala_id][target_id].send_text(data)
-                    logger.info(f"➡️ Mensagem {message.get('type')} enviada para {target_id}")
+                    logger.info(f"➡️ Mensagem {msg_type} de {connection_id} para {target_id}")
                 else:
-                    logger.warning(f"⚠️ Destinatário {target_id} não encontrado")
+                    logger.warning(f"⚠️ Destinatário {target_id} não encontrado para mensagem {msg_type}")
 
             except json.JSONDecodeError:
                 logger.error(f"⚠️ Mensagem inválida: {data[:200]}")
@@ -113,10 +118,14 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
         if connection_id in connection_metadata:
             del connection_metadata[connection_id]
 
+        if hosts_por_sala.get(sala_id) == connection_id:
+            del hosts_por_sala[sala_id]
+
 @app.get("/ws_status")
 async def get_ws_status():
     return JSONResponse(content={
         "salas_ativas": list(salas.keys()),
+        "hosts_ativos": hosts_por_sala,
         "conexoes_ativas": sum(len(v) for v in salas.values()),
         "ultimas_atividades": {
             k: time.ctime(v["last_activity"])
@@ -143,8 +152,12 @@ async def cleanup_inactive_connections():
                 del salas[sala_id][connection_id]
                 if not salas[sala_id]:
                     del salas[sala_id]
+
             if connection_id in connection_metadata:
                 del connection_metadata[connection_id]
+
+            if hosts_por_sala.get(sala_id) == connection_id:
+                del hosts_por_sala[sala_id]
 
         if inactive:
             logger.info(f"🧹 Limpeza: {len(inactive)} conexões inativas removidas")
