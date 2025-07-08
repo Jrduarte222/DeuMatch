@@ -47,6 +47,9 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
 
     logger.info(f"✅ Nova conexão: {connection_id}")
 
+    # Opcional: enviar o connection_id ao frontend
+    await websocket.send_json({"type": "connection-id", "connectionId": connection_id})
+
     try:
         async def send_heartbeats():
             while True:
@@ -78,17 +81,12 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
                     continue
 
                 if msg_type == "viewer-join":
-                    viewer_id = message.get("viewerId", connection_id)
                     connection_metadata[connection_id]["role"] = "viewer"
-
-                    # Registrar explicitamente o viewer
-                    salas[sala_id][viewer_id] = websocket
-
                     host_id = hosts_por_sala.get(sala_id)
                     if host_id and host_id in salas[sala_id]:
                         await salas[sala_id][host_id].send_text(json.dumps({
                             "type": "viewer-join",
-                            "viewerId": viewer_id,
+                            "viewerId": connection_id,
                             "hostId": host_id
                         }))
                     continue
