@@ -78,11 +78,17 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
                     continue
 
                 if msg_type == "viewer-join":
+                    viewer_id = message.get("viewerId", connection_id)
+                    connection_metadata[connection_id]["role"] = "viewer"
+
+                    # Registrar explicitamente o viewer
+                    salas[sala_id][viewer_id] = websocket
+
                     host_id = hosts_por_sala.get(sala_id)
                     if host_id and host_id in salas[sala_id]:
                         await salas[sala_id][host_id].send_text(json.dumps({
                             "type": "viewer-join",
-                            "viewerId": message.get("viewerId", connection_id),
+                            "viewerId": viewer_id,
                             "hostId": host_id
                         }))
                     continue
