@@ -1,9 +1,11 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
-from datetime import datetime
+# routes/chat.py
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from database import SessionLocal
+from database import get_db
 from models import Message
+from datetime import datetime
+from pydantic import BaseModel
+from typing import List
 
 router = APIRouter()
 
@@ -12,27 +14,34 @@ class MessageCreate(BaseModel):
     receiver_id: int
     content: str
 
-@router.post("/messages/send")
-def send_message(msg: MessageCreate):
-    db: Session = SessionLocal()
-    message = Message(
-        sender_id=msg.sender_id,
-        receiver_id=msg.receiver_id,
-        content=msg.content,
+class MessageOut(BaseModel):
+    id: int
+    sender_id: int
+    receiver_id: int
+    content: str
+    timestamp: datetime
+
+    class Config:
+        orm_mode = True
+
+@router.post("/messages/send", response_model=MessageOut)
+def send_message(message: MessageCreate, db: Session = Depends(get_db)):
+    new_message = Message(
+        sender_id=message.sender_id,
+        receiver_id=message.receiver_id,
+        content=message.content,
         timestamp=datetime.utcnow()
     )
-    db.add(message)
+    db.add(new_message)
     db.commit()
-    db.refresh(message)
-    db.close()
-    return {"status": "sent", "message": message}
+    db.refresh(new_message)
+    return new_message
 
-@router.get("/messages/conversation")
-def get_conversation(user1: int, user2: int):
-    db: Session = SessionLocal()
+@router.get("/messages/conversation", response_model=List[MessageOut])
+def get_conversation(user1: int, user2: int, db: Session = Depends(get_db)):
     messages = db.query(Message).filter(
         ((Message.sender_id == user1) & (Message.receiver_id == user2)) |
         ((Message.sender_id == user2) & (Message.receiver_id == user1))
     ).order_by(Message.timestamp.asc()).all()
-    db.close()
+
     return messages
