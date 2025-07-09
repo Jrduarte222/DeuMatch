@@ -6,6 +6,7 @@ from models import Message
 from datetime import datetime
 from pydantic import BaseModel
 from typing import List
+from models import User
 
 router = APIRouter()
 
@@ -43,5 +44,22 @@ def get_conversation(user1: int, user2: int, db: Session = Depends(get_db)):
         ((Message.sender_id == user1) & (Message.receiver_id == user2)) |
         ((Message.sender_id == user2) & (Message.receiver_id == user1))
     ).order_by(Message.timestamp.asc()).all()
-
+    
     return messages
+class SenderInfo(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        orm_mode = True
+
+@router.get("/messages/received_full/{user_id}", response_model=List[SenderInfo])
+def get_message_senders_with_names(user_id: int, db: Session = Depends(get_db)):
+    remetentes_ids = db.query(Message.sender_id).filter(
+        Message.receiver_id == user_id
+    ).distinct().all()
+
+    remetente_ids = [r[0] for r in remetentes_ids]
+
+    remetentes = db.query(User).filter(User.id.in_(remetente_ids)).all()
+    return remetentes
