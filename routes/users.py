@@ -48,27 +48,46 @@ class UserSchema(BaseModel):
     class Config:
         from_attributes = True
 
-# === SCHEMA COM SENHA (usado internamente) ===
+# === SCHEMA COM SENHA (interno) ===
 class UserWithPasswordSchema(UserSchema):
     senha: Optional[str] = None
 
-# === CADASTRO COM SENHA, FOTOS E VÍDEO ===
+# === CADASTRO DE USUÁRIO ===
 @router.post("/users/register")
 async def register_user(
     name: str = Form(...),
     email: str = Form(...),
-    role: str = Form(...),
+    role: str = Form(...),  # participante, cliente, administrador
     senha: Optional[str] = Form(None),
     bio: Optional[str] = Form(None),
     status: Optional[str] = Form("disponível"),
     fotos: List[UploadFile] = File(...),
     video: Optional[UploadFile] = File(None),
+
+    forma_pagamento: Optional[str] = Form(None),
+    forma_recebimento: Optional[str] = Form(None),
+    tipo_chave_pix: Optional[str] = Form(None),
+    chave_pix: Optional[str] = Form(None),
+    valor_sugerido: Optional[str] = Form(None),
+    aceitou_termos: bool = Form(...),
+
     db: Session = Depends(get_db)
 ):
+    if not aceitou_termos:
+        raise HTTPException(status_code=400, detail="Você deve aceitar os termos de uso.")
+
     existing_user = db.query(DBUser).filter(DBUser.email == email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email já registrado")
 
+    if role == "participante":
+        if not all([forma_recebimento, tipo_chave_pix, chave_pix, valor_sugerido]):
+            raise HTTPException(status_code=400, detail="Participantes devem informar chave Pix, tipo de chave e valor sugerido.")
+    elif role == "cliente":
+        if not forma_pagamento:
+            raise HTTPException(status_code=400, detail="Clientes devem informar a forma de pagamento.")
+
+    # Upload das fotos
     foto1 = None
     foto2 = None
     galeria = []
@@ -94,8 +113,17 @@ async def register_user(
         foto1=foto1,
         foto2=foto2,
         galeria=",".join(galeria),
-        video=video_url
+        video=video_url,
+
+        forma_pagamento=forma_pagamento,
+        forma_recebimento=forma_recebimento,
+        tipo_chave_pix=tipo_chave_pix,
+        chave_pix=chave_pix,
+        valor_sugerido=valor_sugerido,
+
+        aceitou_termos=aceitou_termos
     )
+
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -115,7 +143,7 @@ def login_user(
         raise HTTPException(status_code=403, detail="Usuário suspenso")
     return {"message": "Login autorizado", "user": user}
 
-# === ATUALIZAR PERFIL (opcionalmente senha) ===
+# === ATUALIZAR PERFIL ===
 @router.put("/users/update/{id}")
 async def update_user(
     id: int,
@@ -153,7 +181,7 @@ async def update_user(
     db.refresh(user)
     return {"message": "Perfil atualizado com sucesso", "user": user}
 
-# === LISTAR USUÁRIOS (COM SENHA PARA USO INTERNO DO APP) ===
+# === LISTAR USUÁRIOS (exceto suspensos) ===
 @router.get("/users/list", response_model=List[UserWithPasswordSchema])
 async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(DBUser)
@@ -181,7 +209,7 @@ def excluir_usuario(id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Usuário excluído com sucesso"}
 
-# === EXCLUIR TODOS OS USUÁRIOS ===
+# === LIMPAR TODOS ===
 @router.post("/admin/limpar-tudo")
 def limpar_usuarios(db: Session = Depends(get_db)):
     db.query(DBUser).delete()
