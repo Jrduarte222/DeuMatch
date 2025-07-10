@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routes import users, chat
 from database import Base, engine
+from routes import movimentos
 
 app = FastAPI()
+app.include_router(movimentos.router)
 
 # Inclusão das rotas
 app.include_router(users.router)

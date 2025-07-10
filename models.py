@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Text, BigInteger, Integer, DateTime, Boolean
 from database import Base
 from datetime import datetime
+from sqlalchemy import ForeignKey
 
 # Tabela de usuários
 class User(Base):
@@ -38,3 +39,14 @@ class Message(Base):
     receiver_id = Column(Integer, nullable=False)
     content = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+    class Movimento(Base):
+    __tablename__ = "movimentos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    participante_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    valor = Column(Integer, nullable=False)  # valor em centavos
+    metodo = Column(String(20), nullable=False)  # "pix" ou "cartao"
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    repassado = Column(Boolean, default=False)
