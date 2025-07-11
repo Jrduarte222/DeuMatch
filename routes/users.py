@@ -68,7 +68,6 @@ async def register_user(
     forma_recebimento: Optional[str] = Form(None),
     tipo_chave_pix: Optional[str] = Form(None),
     chave_pix: Optional[str] = Form(None),
-    valor_sugerido: Optional[str] = Form(None),
     aceitou_termos: bool = Form(...),
 
     db: Session = Depends(get_db)
@@ -81,8 +80,8 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Email já registrado")
 
     if role == "participante":
-        if not all([forma_recebimento, tipo_chave_pix, chave_pix, valor_sugerido]):
-            raise HTTPException(status_code=400, detail="Participantes devem informar chave Pix, tipo de chave e valor sugerido.")
+        if not all([forma_recebimento, tipo_chave_pix, chave_pix]):
+            raise HTTPException(status_code=400, detail="Participantes devem informar chave Pix e tipo de chave.")
     elif role == "cliente":
         if not forma_pagamento:
             raise HTTPException(status_code=400, detail="Clientes devem informar a forma de pagamento.")
@@ -120,7 +119,6 @@ async def register_user(
         forma_recebimento=forma_recebimento,
         tipo_chave_pix=tipo_chave_pix,
         chave_pix=chave_pix,
-        valor_sugerido=valor_sugerido,
 
         aceitou_termos=aceitou_termos
     )

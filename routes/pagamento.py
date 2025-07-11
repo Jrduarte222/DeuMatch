@@ -8,7 +8,7 @@ router = APIRouter()
 # Chave Pix fixa do administrador
 ADMIN_PIX = "51985984212"
 
-@router.post("/pagamento/solicitar")
+@router.post("/pagamento/pix")
 def solicitar_pagamento(participante_id: int, db: Session = Depends(get_db)):
     participante = db.query(User).filter(User.id == participante_id).first()
     if not participante or participante.role != "participante":

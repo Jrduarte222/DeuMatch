@@ -23,7 +23,6 @@ class User(Base):
     forma_recebimento = Column(String(50), nullable=True)     # Participantes
     chave_pix = Column(String(100), nullable=True)            # Participantes
     tipo_chave_pix = Column(String(50), nullable=True)        # CPF, celular, etc.
-    valor_sugerido = Column(String(20), nullable=True)        # Ex: "20.00"
     saldo = Column(Integer, default=0)                        # Em centavos
 
     # Termos de uso
