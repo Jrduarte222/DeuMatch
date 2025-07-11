@@ -99,8 +99,8 @@ async def register_user(
                 foto1 = url
             elif index == 1:
                 foto2 = url
-        else:
-            galeria.append(url)
+            else:
+                galeria.append(url)
 
     video_url = upload_to_cloudinary(video) if video else None
 
