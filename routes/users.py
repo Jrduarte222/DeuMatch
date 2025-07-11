@@ -61,7 +61,7 @@ async def register_user(
     senha: Optional[str] = Form(None),
     bio: Optional[str] = Form(None),
     status: Optional[str] = Form("disponível"),
-    fotos: List[UploadFile] = File(...),
+    fotos: List[UploadFile] = File(None),
     video: Optional[UploadFile] = File(None),
 
     forma_pagamento: Optional[str] = Form(None),
@@ -92,12 +92,13 @@ async def register_user(
     foto2 = None
     galeria = []
 
-    for index, foto in enumerate(fotos):
-        url = upload_to_cloudinary(foto)
-        if index == 0:
-            foto1 = url
-        elif index == 1:
-            foto2 = url
+    if fotos:
+        for index, foto in enumerate(fotos):
+            url = upload_to_cloudinary(foto)
+            if index == 0:
+                foto1 = url
+            elif index == 1:
+                foto2 = url
         else:
             galeria.append(url)
 
