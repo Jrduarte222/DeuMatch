@@ -21,7 +21,7 @@ class User(Base):
     # Campos para pagamento e controle
     forma_pagamento = Column(String(50), nullable=True)       # Clientes
     forma_recebimento = Column(String(50), nullable=True)     # Participantes
-    chave_pix = Column(String(100), nullable=True)            # Participantes
+    pix = Column(String(100), nullable=True)            # Participantes
     tipo_chave_pix = Column(String(50), nullable=True)        # CPF, celular, etc.
     saldo = Column(Integer, default=0)                        # Em centavos
 
