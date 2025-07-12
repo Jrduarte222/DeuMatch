@@ -15,8 +15,6 @@ class User(Base):
     status = Column(String(50), default='ativo')  # ativo, suspenso
     foto1 = Column(String, nullable=True)
     foto2 = Column(String, nullable=True)
-    foto3 = Column(String, nullable=True)  # Adicionado para galeria
-    foto4 = Column(String, nullable=True)  # Adicionado para galeria
     video = Column(String, nullable=True)
 
     # Campos para pagamento
