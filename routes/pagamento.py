@@ -8,7 +8,7 @@ from models import User
 
 router = APIRouter()
 
-# Chave Pix fixa do administrador (em fallback)
+# Chave Pix fixa do administrador
 ADMIN_PIX = "51985984212"
 
 # Modelo de entrada via JSON
@@ -21,14 +21,11 @@ def solicitar_pagamento(dados: PagamentoRequest, db: Session = Depends(get_db)):
     if not participante or participante.role != "participante":
         raise HTTPException(status_code=404, detail="Participante não encontrado")
 
-    # Usa a chave do participante se houver, senão usa a chave padrão
-    chave_destino = participante.chave_pix or ADMIN_PIX
-
     return {
-        "valor": 1000,  # em centavos
+        "valor": 1000,
         "valor_reais": "R$ 10,00",
-        "mensagem": "Pagamento via PicPay – inclui taxa de R$ 2,00",
-        "link_picpay": f"https://picpay.me/{chave_destino}/10.00",
-        "chave_pix_admin": chave_destino,
-        "recebedor": participante.name
+        "qrcode_img": "/qrcode-pix.png",  # imagem salva em public/
+        "chave_pix_admin": ADMIN_PIX,
+        "recebedor": "Admin"
     }
+
