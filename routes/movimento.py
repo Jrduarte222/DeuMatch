@@ -30,3 +30,8 @@ def registrar_movimento(
     db.commit()
     db.refresh(novo)
     return {"mensagem": "Movimento registrado", "movimento_id": novo.id}
+@router.get("/movimentos/cliente/{cliente_id}")
+def participantes_desbloqueados(cliente_id: int, db: Session = Depends(get_db)):
+    movimentos = db.query(Movimento).filter(Movimento.cliente_id == cliente_id).all()
+    ids = list({m.participante_id for m in movimentos})
+    return ids
