@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from database import Base, engine
-from routes import users, chat, movimento  # Importando tudo de uma vez (boa prática)
+from routes import users, chat, movimento, pagamento  # Importando tudo de uma vez (boa prática)
 
 app = FastAPI()
 
@@ -11,6 +11,7 @@ app = FastAPI()
 app.include_router(users.router)
 app.include_router(chat.router)
 app.include_router(movimento.router)
+app.include_router(pagamento.router)
 
 # Middleware CORS
 app.add_middleware(
