@@ -24,7 +24,7 @@ def solicitar_pagamento(dados: PagamentoRequest, db: Session = Depends(get_db)):
     return {
         "valor": 1000,
         "valor_reais": "R$ 10,00",
-        "qrcode_img": "/qrcode-pix.png",  # imagem salva em public/
+        "qrcode_img": "/qr-admin-pix.jpg",  # imagem salva em public/
         "chave_pix_admin": ADMIN_PIX,
         "recebedor": "Admin"
     }
