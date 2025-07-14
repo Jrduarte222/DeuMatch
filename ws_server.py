@@ -88,8 +88,10 @@ async def websocket_endpoint(websocket: WebSocket, sala_id: str):
                 target_id = None
                 if msg_type == "offer":
                     target_id = message.get("viewerId")
-                elif msg_type in ["answer", "candidate"]:
+                elif msg_type == "answer":
                     target_id = hosts_por_sala.get(sala_id)
+                elif msg_type == "candidate":
+                    target_id = message.get("viewerId")
 
                 if target_id and target_id in salas.get(sala_id, {}):
                     await salas[sala_id][target_id].send_text(data)
