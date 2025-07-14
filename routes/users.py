@@ -1,14 +1,13 @@
 # app/routes/users.py
-
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
-from sqlalchemy.orm import Session
-from typing import Optional, List
-from pydantic import BaseModel, validator
 import cloudinary.uploader
 import cloudinary
 import time
 import os
-
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from sqlalchemy.orm import Session
+from typing import Optional, List
+from pydantic import BaseModel, validator
+from fastapi import status
 from database import get_db
 from models import User as DBUser
 
@@ -214,3 +213,34 @@ def limpar_usuarios(db: Session = Depends(get_db)):
     db.query(DBUser).delete()
     db.commit()
     return {"message": "Todos os usuários foram removidos do banco."}
+
+@router.delete("/users/confirm_delete/{user_id}", status_code=status.HTTP_200_OK)
+def confirmar_exclusao(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(DBUser).filter(DBUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    # Deletar fotos do Cloudinary
+    galeria = user.galeria.split(",") if user.galeria else []
+    for foto_url in [user.foto1, user.foto2] + galeria + [user.video]:
+        if foto_url:
+            public_id = foto_url.split("/")[-1].split(".")[0]
+            try:
+                cloudinary.uploader.destroy(public_id)
+            except Exception as e:
+                print(f"Erro ao excluir {public_id} do Cloudinary: {e}")
+
+    db.delete(user)
+    db.commit()
+    return {"msg": "Usuário excluído com sucesso"}
+
+@router.post("/users/request_delete")
+def solicitar_exclusao(email: str = Form(...), db: Session = Depends(get_db)):
+    user = db.query(DBUser).filter(DBUser.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    user.exclusao_pendente = True
+    db.commit()
+    return {"message": "Solicitação de exclusão enviada"}
+

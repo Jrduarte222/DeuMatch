@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Text, BigInteger, Integer, DateTime, Boolean, ForeignKey
 from database import Base
 from datetime import datetime
+from sqlalchemy import Boolean
 
 # Tabela de usuários
 class User(Base):
@@ -17,6 +18,7 @@ class User(Base):
     foto2 = Column(String, nullable=True)
     galeria = Column(Text, nullable=True)
     video = Column(String, nullable=True)
+    exclusao_pendente = Column(Boolean, default=False)
 
     # Campos para pagamento e controle
     forma_pagamento = Column(String(50), nullable=True)       # Clientes

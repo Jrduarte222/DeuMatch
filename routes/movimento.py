@@ -5,6 +5,7 @@ from typing import Optional
 from database import get_db
 from models import Movimento, User
 from datetime import date
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -44,9 +45,16 @@ def registrar_movimento(
     db.commit()
     db.refresh(novo)
     return {"mensagem": "Movimento registrado", "movimento_id": novo.id}
+
 @router.get("/movimentos/cliente/{cliente_id}")
 def participantes_desbloqueados(cliente_id: int, db: Session = Depends(get_db)):
-    movimentos = db.query(Movimento).filter(Movimento.cliente_id == cliente_id).all()
+    uma_hora_atras = datetime.utcnow() - timedelta(hours=1)
+    
+    movimentos = db.query(Movimento).filter(
+        Movimento.cliente_id == cliente_id,
+        Movimento.timestamp >= uma_hora_atras
+    ).all()
+    
     ids = list({m.participante_id for m in movimentos})
     return ids
 @router.get("/movimentos/list")
