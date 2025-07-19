@@ -142,42 +142,58 @@ def login_user(
     return {"message": "Login autorizado", "user": user}
 
 # === ATUALIZAR PERFIL ===
-@router.put("/users/update/{id}")
+@router.put("/users/update/{user_id}")
 async def update_user(
-    id: int,
+    user_id: int,
+    name: str = Form(...),
     email: str = Form(...),
-    bio: Optional[str] = Form(None),
-    status: Optional[str] = Form(None),
-    senha: Optional[str] = Form(None),
-    fotos: Optional[List[UploadFile]] = File(None),
-    db: Session = Depends(get_db)
+    bio: str = Form(""),
+    status: str = Form("disponível"),
+    senha: str = Form(None),
+    fotos: List[UploadFile] = None,
+    videos: List[UploadFile] = None,
+    db: Session = Depends(get_db),
 ):
-    user = db.query(DBUser).filter(DBUser.id == id, DBUser.email == email).first()
+    user = db.query(DBUser).filter(DBUser.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
 
-    if bio:
-        user.bio = bio
-    if status:
-        user.status = status
+    user.name = name
+    user.email = email
+    user.bio = bio
+    user.status = status
     if senha:
-        user.senha = senha
+        user.senha = senha  # Em produção, sempre aplicar hash
 
+    # Upload de fotos
     if fotos:
-        galeria = []
-        for index, foto in enumerate(fotos):
-            url = upload_to_cloudinary(foto)
-            if index == 0:
-                user.foto1 = url
-            elif index == 1:
-                user.foto2 = url
-            else:
-                galeria.append(url)
-        user.galeria = ",".join(galeria) if galeria else ""
+        if len(fotos) > 20:
+            raise HTTPException(status_code=400, detail="Máximo de 20 fotos permitido.")
+        uploaded_fotos = []
+        for i, foto in enumerate(fotos):
+            upload_result = cloudinary.uploader.upload(foto.file, folder="usuarios")
+            uploaded_fotos.append(upload_result["secure_url"])
+
+        # As 2 primeiras fotos ficam em campos próprios
+        user.foto1 = uploaded_fotos[0] if len(uploaded_fotos) > 0 else user.foto1
+        user.foto2 = uploaded_fotos[1] if len(uploaded_fotos) > 1 else user.foto2
+        # Restante vai para a galeria
+        user.galeria = uploaded_fotos[2:] if len(uploaded_fotos) > 2 else []
+
+    # Upload de vídeos
+    if videos:
+        if len(videos) > 5:
+            raise HTTPException(status_code=400, detail="Máximo de 5 vídeos permitido.")
+        uploaded_videos = []
+        for video in videos:
+            upload_result = cloudinary.uploader.upload(video.file, resource_type="video", folder="usuarios")
+            uploaded_videos.append(upload_result["secure_url"])
+        user.video = uploaded_videos  # Armazena lista de vídeos
 
     db.commit()
     db.refresh(user)
-    return {"message": "Perfil atualizado com sucesso", "user": user}
+
+    return {"mensagem": "Perfil atualizado com sucesso!", "user": user}
 
 # === LISTAR USUÁRIOS (exceto suspensos) ===
 @router.get("/users/list", response_model=List[UserWithPasswordSchema])

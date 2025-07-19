@@ -17,7 +17,7 @@ class User(Base):
     foto1 = Column(String, nullable=True)
     foto2 = Column(String, nullable=True)
     galeria = Column(Text, nullable=True)
-    video = Column(String, nullable=True)
+    video = Column(Text, nullable=True)
     exclusao_pendente = Column(Boolean, default=False)
 
     # Campos para pagamento e controle
