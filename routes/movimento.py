@@ -48,6 +48,8 @@ def listar_movimentos_cliente(cliente_id: int, db: Session = Depends(get_db)):
     for mov in movimentos:
         if mov.status == "liberado":
             resultado.setdefault(mov.participante_id, {})[mov.tipo] = True
+        elif mov.status == "aguardando":
+            resultado.setdefault(mov.participante_id, {})[mov.tipo] = "aguardando"
     return resultado
 
 
