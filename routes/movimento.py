@@ -1,118 +1,85 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import List
 from database import get_db
-from models import Movimento, User
-from datetime import datetime, timedelta
+from models import Movimento
 
 router = APIRouter()
 
-# Modelo de entrada
-class MovimentoRequest(BaseModel):
+# === SCHEMAS ===
+class MovimentoSchema(BaseModel):
     cliente_id: int
     participante_id: int
     valor: int
-    metodo: str
-    tipo: str  # "fotos" ou "videos"
+    metodo: str  # "pix" ou "cartao"
+    tipo: str    # "fotos" ou "videos"
 
 class MovimentoResponse(BaseModel):
     id: int
     cliente_id: int
     participante_id: int
-    cliente: Optional[str] = None
-    cliente_email: Optional[str] = None
-    participante: Optional[str] = None
     valor: int
     metodo: str
     tipo: str
-    data: str
-    hora: str
     repassado: bool
 
-# POST /movimentos – registrar novo desbloqueio
+    class Config:
+        orm_mode = True
+
+# === REGISTRAR MOVIMENTO ===
 @router.post("/movimentos")
-def registrar_movimento(
-    dados: MovimentoRequest,
-    db: Session = Depends(get_db),
-):
-    if dados.tipo not in ["fotos", "videos"]:
+def registrar_movimento(mov: MovimentoSchema, db: Session = Depends(get_db)):
+    if mov.tipo not in ["fotos", "videos"]:
         raise HTTPException(status_code=400, detail="Tipo inválido. Use 'fotos' ou 'videos'.")
 
-    novo = Movimento(
-        cliente_id=dados.cliente_id,
-        participante_id=dados.participante_id,
-        valor=dados.valor,
-        metodo=dados.metodo,
-        tipo=dados.tipo
+    movimento = Movimento(
+        cliente_id=mov.cliente_id,
+        participante_id=mov.participante_id,
+        valor=mov.valor,
+        metodo=mov.metodo,
+        tipo=mov.tipo,
+        repassado=False
     )
-    db.add(novo)
+    db.add(movimento)
     db.commit()
-    db.refresh(novo)
-    return {"mensagem": "Movimento registrado", "movimento_id": novo.id}
+    db.refresh(movimento)
+    return {"message": "Movimento registrado com sucesso", "movimento": movimento}
 
-# GET /movimentos/cliente/{cliente_id}
+# === LISTAR MOVIMENTOS DO CLIENTE (DESBLOQUEIOS) ===
 @router.get("/movimentos/cliente/{cliente_id}")
-def participantes_desbloqueados(cliente_id: int, db: Session = Depends(get_db)):
-    uma_hora_atras = datetime.utcnow() - timedelta(hours=1)
-    
-    movimentos = db.query(Movimento).filter(
-        Movimento.cliente_id == cliente_id,
-        Movimento.timestamp >= uma_hora_atras
-    ).all()
-    
-    # Organizar por participante_id com tipos
-    controle = {}
-    for m in movimentos:
-        if m.participante_id not in controle:
-            controle[m.participante_id] = {"fotos": False, "videos": False}
-        if m.tipo == "fotos":
-            controle[m.participante_id]["fotos"] = True
-        if m.tipo == "videos":
-            controle[m.participante_id]["videos"] = True
-    
-    return controle
+def listar_desbloqueios(cliente_id: int, db: Session = Depends(get_db)):
+    movimentos = db.query(Movimento).filter(Movimento.cliente_id == cliente_id).all()
+    desbloqueios = {}
 
-# GET /movimentos/list
-@router.get("/movimentos/list")
-def listar_movimentos(db: Session = Depends(get_db)):
-    movimentos = db.query(Movimento).order_by(Movimento.timestamp.desc()).all()
-    
-    resultados = []
     for mov in movimentos:
-        cliente = db.query(User).filter(User.id == mov.cliente_id).first()
-        participante = db.query(User).filter(User.id == mov.participante_id).first()
-        
-        resultados.append({
-            "id": mov.id,
-            "cliente_id": mov.cliente_id,
-            "participante_id": mov.participante_id,
-            "cliente": cliente.name if cliente else "Cliente desconhecido",
-            "cliente_email": cliente.email if cliente else "",
-            "participante": participante.name if participante else "Participante desconhecido",
-            "valor": mov.valor,
-            "metodo": mov.metodo,
-            "tipo": mov.tipo,
-            "data": mov.timestamp.date().isoformat(),
-            "hora": mov.timestamp.time().strftime("%H:%M"),
-            "repassado": mov.repassado
-        })
-    
-    return resultados
+        if mov.participante_id not in desbloqueios:
+            desbloqueios[mov.participante_id] = {"fotos": False, "videos": False}
+        if mov.tipo == "fotos":
+            desbloqueios[mov.participante_id]["fotos"] = True
+        elif mov.tipo == "videos":
+            desbloqueios[mov.participante_id]["videos"] = True
 
-# PATCH /movimentos/repassar/{movimento_id}
-@router.patch("/movimentos/repassar/{movimento_id}")
-def marcar_repassado(movimento_id: int, db: Session = Depends(get_db)):
-    movimento = db.query(Movimento).filter(Movimento.id == movimento_id).first()
+    return desbloqueios
+
+# === LISTAR TODOS OS MOVIMENTOS ===
+@router.get("/movimentos", response_model=List[MovimentoResponse])
+def listar_movimentos(db: Session = Depends(get_db)):
+    return db.query(Movimento).all()
+
+# === REPASSAR PAGAMENTO ===
+@router.post("/movimentos/repassar/{mov_id}")
+def repassar_pagamento(mov_id: int, db: Session = Depends(get_db)):
+    movimento = db.query(Movimento).filter(Movimento.id == mov_id).first()
     if not movimento:
-        raise HTTPException(status_code=404, detail="Movimento não encontrado")
-    
+        raise HTTPException(status_code=404, detail="Movimento não encontrado.")
     movimento.repassado = True
     db.commit()
-    
-    participante = db.query(User).filter(User.id == movimento.participante_id).first()
-    if participante:
-        participante.saldo += movimento.valor
-        db.commit()
-    
-    return {"mensagem": "Pagamento marcado como repassado"}
+    return {"message": "Pagamento repassado com sucesso."}
+
+# === LIMPAR MOVIMENTOS ===
+@router.delete("/movimentos/limpar")
+def limpar_movimentos(db: Session = Depends(get_db)):
+    db.query(Movimento).delete()
+    db.commit()
+    return {"message": "Todos os movimentos foram removidos."}
