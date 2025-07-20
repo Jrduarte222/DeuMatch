@@ -1,7 +1,6 @@
 from sqlalchemy import Column, String, Text, BigInteger, Integer, DateTime, Boolean, ForeignKey
 from database import Base
 from datetime import datetime
-from sqlalchemy import Boolean
 
 # Tabela de usuários
 class User(Base):
@@ -19,7 +18,6 @@ class User(Base):
     galeria = Column(Text, nullable=True)
     video = Column(Text, nullable=True)
     exclusao_pendente = Column(Boolean, default=False)
-    expiracao = Column(DateTime, nullable=True)
 
     # Campos para pagamento e controle
     forma_pagamento = Column(String(50), nullable=True)       # Clientes
@@ -31,6 +29,7 @@ class User(Base):
     # Termos de uso
     aceitou_termos = Column(Boolean, default=False)
 
+
 # Tabela de mensagens do chat
 class Message(Base):
     __tablename__ = "messages"
@@ -40,6 +39,7 @@ class Message(Base):
     receiver_id = Column(Integer, nullable=False)
     content = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
 
 # Tabela de movimentações financeiras
 class Movimento(Base):
@@ -54,3 +54,4 @@ class Movimento(Base):
     status = Column(String(20), default="aguardando")         # aguardando ou liberado
     timestamp = Column(DateTime, default=datetime.utcnow)
     repassado = Column(Boolean, default=False)
+    expiracao = Column(DateTime, nullable=True)               # hora de expiração do desbloqueio
