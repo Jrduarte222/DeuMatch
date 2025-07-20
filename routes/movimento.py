@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
 from models import Movimento
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -26,7 +27,8 @@ def criar_movimento(
         valor=valor,
         metodo=metodo,
         tipo=tipo,
-        status="aguardando"
+        status="aguardando",
+        expiracao=None  # será definida apenas quando o admin liberar
     )
     db.add(movimento)
     db.commit()
@@ -47,13 +49,26 @@ def listar_todos_movimentos(db: Session = Depends(get_db)):
 def listar_movimentos_cliente(cliente_id: int, db: Session = Depends(get_db)):
     movimentos = db.query(Movimento).filter(Movimento.cliente_id == cliente_id).all()
     resultado = {}
+    agora = datetime.utcnow()
+
     for mov in movimentos:
-        tipo = getattr(mov, "tipo", "fotos") or "fotos"
-        status = getattr(mov, "status", "aguardando") or "aguardando"
+        status = mov.status or "aguardando"
+
+        # Verificar se o desbloqueio expirou
+        if status == "liberado" and mov.expiracao and mov.expiracao < agora:
+            print(f"[DEBUG] Desbloqueio expirado - mov.id={mov.id}")
+            mov.status = "expirado"
+            db.commit()
+            status = "expirado"
+
         if status == "liberado":
-            resultado.setdefault(mov.participante_id, {})[tipo] = True
+            resultado.setdefault(mov.participante_id, {})[mov.tipo] = True
         elif status == "aguardando":
-            resultado.setdefault(mov.participante_id, {})[tipo] = "aguardando"
+            resultado.setdefault(mov.participante_id, {})[mov.tipo] = "aguardando"
+        elif status == "expirado":
+            # Considera como bloqueado (não retorna nada liberado)
+            resultado.setdefault(mov.participante_id, {})[mov.tipo] = None
+
     print(f"[DEBUG] Movimentos cliente {cliente_id}: {resultado}")
     return resultado
 
@@ -65,8 +80,9 @@ def liberar_movimento(movimento_id: int, db: Session = Depends(get_db)):
     if not movimento:
         raise HTTPException(status_code=404, detail="Movimento não encontrado.")
     movimento.status = "liberado"
+    movimento.expiracao = datetime.utcnow() + timedelta(hours=1)  # Expira em 1 hora
     db.commit()
-    return {"message": "Movimento liberado com sucesso"}
+    return {"message": f"Movimento {movimento.id} liberado por 1 hora."}
 
 
 # === REPASSAR PAGAMENTO ===
