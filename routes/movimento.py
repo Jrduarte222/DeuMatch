@@ -48,11 +48,12 @@ def listar_movimentos_cliente(cliente_id: int, db: Session = Depends(get_db)):
     movimentos = db.query(Movimento).filter(Movimento.cliente_id == cliente_id).all()
     resultado = {}
     for mov in movimentos:
-        status = mov.status or "aguardando"
+        tipo = getattr(mov, "tipo", "fotos") or "fotos"
+        status = getattr(mov, "status", "aguardando") or "aguardando"
         if status == "liberado":
-            resultado.setdefault(mov.participante_id, {})[mov.tipo] = True
+            resultado.setdefault(mov.participante_id, {})[tipo] = True
         elif status == "aguardando":
-            resultado.setdefault(mov.participante_id, {})[mov.tipo] = "aguardando"
+            resultado.setdefault(mov.participante_id, {})[tipo] = "aguardando"
     print(f"[DEBUG] Movimentos cliente {cliente_id}: {resultado}")
     return resultado
 
