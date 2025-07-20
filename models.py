@@ -47,7 +47,9 @@ class Movimento(Base):
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     participante_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    valor = Column(Integer, nullable=False)  # valor em centavos
-    metodo = Column(String(20), nullable=False)  # "pix" ou "cartao"
+    tipo = Column(String(20), nullable=False)                 # fotos ou videos
+    valor = Column(Integer, nullable=False)                   # valor em centavos
+    metodo = Column(String(20), nullable=False)               # "pix" ou "cartao"
+    status = Column(String(20), default="aguardando")         # aguardando ou liberado
     timestamp = Column(DateTime, default=datetime.utcnow)
     repassado = Column(Boolean, default=False)
