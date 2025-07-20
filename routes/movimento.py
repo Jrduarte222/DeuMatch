@@ -33,11 +33,10 @@ def criar_movimento(
     return {"message": "Pedido registrado com sucesso", "movimento": movimento}
 
 
-# === LISTAR MOVIMENTOS ===
-@router.get("/movimentos", response_model=List[dict])
-def listar_movimentos(db: Session = Depends(get_db)):
-    movimentos = db.query(Movimento).all()
-    return [m.__dict__ for m in movimentos]
+# === LISTAR TODOS MOVIMENTOS (ADMIN) ===
+@router.get("/movimentos/list")
+def listar_todos_movimentos(db: Session = Depends(get_db)):
+    return db.query(Movimento).all()
 
 
 # === LISTAR MOVIMENTOS DE UM CLIENTE ===
