@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
@@ -9,11 +9,11 @@ router = APIRouter()
 # === CRIAR MOVIMENTO (pedido de desbloqueio) ===
 @router.post("/movimentos")
 def criar_movimento(
-    cliente_id: int,
-    participante_id: int,
-    tipo: str,  # fotos ou videos
-    valor: int = 1000,  # R$10,00
-    metodo: str = "pix",
+    cliente_id: int = Form(...),
+    participante_id: int = Form(...),
+    tipo: str = Form(...),  # fotos ou videos
+    valor: int = Form(1000),  # R$10,00
+    metodo: str = Form("pix"),
     db: Session = Depends(get_db)
 ):
     print(f"[DEBUG] Criando movimento: cliente={cliente_id}, participante={participante_id}, tipo={tipo}, valor={valor}, metodo={metodo}")
