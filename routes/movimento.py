@@ -16,6 +16,7 @@ def criar_movimento(
     metodo: str = "pix",
     db: Session = Depends(get_db)
 ):
+    print(f"[DEBUG] Criando movimento: cliente={cliente_id}, participante={participante_id}, tipo={tipo}, valor={valor}, metodo={metodo}")
     if tipo not in ["fotos", "videos"]:
         raise HTTPException(status_code=400, detail="Tipo inválido. Use 'fotos' ou 'videos'.")
 
@@ -30,13 +31,15 @@ def criar_movimento(
     db.add(movimento)
     db.commit()
     db.refresh(movimento)
+    print(f"[DEBUG] Movimento criado: {movimento.__dict__}")
     return {"message": "Pedido registrado com sucesso", "movimento": movimento}
 
 
 # === LISTAR TODOS MOVIMENTOS (ADMIN) ===
 @router.get("/movimentos/list")
 def listar_todos_movimentos(db: Session = Depends(get_db)):
-    return db.query(Movimento).all()
+    movimentos = db.query(Movimento).all()
+    return [m.__dict__ for m in movimentos]
 
 
 # === LISTAR MOVIMENTOS DE UM CLIENTE ===
@@ -45,10 +48,12 @@ def listar_movimentos_cliente(cliente_id: int, db: Session = Depends(get_db)):
     movimentos = db.query(Movimento).filter(Movimento.cliente_id == cliente_id).all()
     resultado = {}
     for mov in movimentos:
-        if mov.status == "liberado":
+        status = mov.status or "aguardando"
+        if status == "liberado":
             resultado.setdefault(mov.participante_id, {})[mov.tipo] = True
-        elif mov.status == "aguardando":
+        elif status == "aguardando":
             resultado.setdefault(mov.participante_id, {})[mov.tipo] = "aguardando"
+    print(f"[DEBUG] Movimentos cliente {cliente_id}: {resultado}")
     return resultado
 
 
