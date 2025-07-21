@@ -11,13 +11,13 @@ router = APIRouter()
 def criar_movimento(
     cliente_id: int = Form(...),
     participante_id: int = Form(...),
-    tipo: str = Form(...),  # 'fotos' ou 'videos'
-    valor: int = Form(1000),  # R$10,00
+    tipo: str = Form(...),  # 'fotos', 'videos' ou 'acompanhante'
+    valor: int = Form(1000),  # R$10,00 padrão
     metodo: str = Form("pix"),
     db: Session = Depends(get_db)
 ):
-    if tipo not in ["fotos", "videos"]:
-        raise HTTPException(status_code=400, detail="Tipo inválido. Use 'fotos' ou 'videos'.")
+    if tipo not in ["fotos", "videos", "acompanhante"]:
+        raise HTTPException(status_code=400, detail="Tipo inválido. Use 'fotos', 'videos' ou 'acompanhante'.")
 
     # Cria o novo movimento com status "aguardando"
     movimento = Movimento(
@@ -78,7 +78,6 @@ def listar_movimentos_cliente(cliente_id: int, db: Session = Depends(get_db)):
         elif status == "aguardando":
             resultado.setdefault(mov.participante_id, {})[mov.tipo] = "aguardando"
         elif status == "expirado":
-            # Trata expirado como bloqueado novamente
             resultado.setdefault(mov.participante_id, {})[mov.tipo] = False
 
     return resultado

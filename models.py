@@ -25,6 +25,7 @@ class User(Base):
     chave_pix = Column(String(100), nullable=True)            # Participantes
     tipo_chave_pix = Column(String(50), nullable=True)        # CPF, celular, etc.
     saldo = Column(Integer, default=0)                        # Em centavos
+    valor_acompanhante = Column(Integer, default=0)           # Valor fixo do serviço (centavos)
 
     # Termos de uso
     aceitou_termos = Column(Boolean, default=False)
@@ -48,7 +49,7 @@ class Movimento(Base):
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     participante_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    tipo = Column(String(20), nullable=False)                 # fotos ou videos
+    tipo = Column(String(20), nullable=False)                 # fotos, videos, acompanhante
     valor = Column(Integer, nullable=False)                   # valor em centavos
     metodo = Column(String(20), nullable=False)               # "pix" ou "cartao"
     status = Column(String(20), default="aguardando")         # aguardando ou liberado
