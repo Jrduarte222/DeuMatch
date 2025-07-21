@@ -19,7 +19,18 @@ def criar_movimento(
     if tipo not in ["fotos", "videos", "acompanhante"]:
         raise HTTPException(status_code=400, detail="Tipo inválido. Use 'fotos', 'videos' ou 'acompanhante'.")
 
-    # Cria o novo movimento com status "aguardando"
+    # Verifica se já existe um pedido "aguardando" para este cliente/participante/tipo
+    existente = db.query(Movimento).filter(
+        Movimento.cliente_id == cliente_id,
+        Movimento.participante_id == participante_id,
+        Movimento.tipo == tipo,
+        Movimento.status == "aguardando"
+    ).first()
+
+    if existente:
+        return {"message": "Pedido já existe", "movimento": existente.id}
+
+    # Cria um novo movimento
     movimento = Movimento(
         cliente_id=cliente_id,
         participante_id=participante_id,
@@ -27,7 +38,7 @@ def criar_movimento(
         metodo=metodo,
         tipo=tipo,
         status="aguardando",
-        expiracao=None  # Definida apenas após liberação do admin
+        expiracao=None  # Definida após liberação
     )
     db.add(movimento)
     db.commit()
