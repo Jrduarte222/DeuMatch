@@ -1,7 +1,6 @@
 # app/routes/users.py
 import cloudinary.uploader
 import cloudinary
-import time
 import os
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy.orm import Session
@@ -37,6 +36,7 @@ class UserSchema(BaseModel):
     foto2: Optional[str] = None
     galeria: Optional[List[str]] = []
     video: Optional[str] = None
+    valor_acompanhante: Optional[int] = 0  # Adicionado
 
     @validator("galeria", pre=True)
     def split_galeria(cls, v):
@@ -67,6 +67,7 @@ async def register_user(
     forma_recebimento: Optional[str] = Form(None),
     tipo_chave_pix: Optional[str] = Form(None),
     chave_pix: Optional[str] = Form(None),
+    valor_acompanhante: Optional[int] = Form(0),  # Novo campo
     aceitou_termos: bool = Form(...),
 
     db: Session = Depends(get_db)
@@ -118,6 +119,7 @@ async def register_user(
         forma_recebimento=forma_recebimento,
         tipo_chave_pix=tipo_chave_pix,
         chave_pix=chave_pix,
+        valor_acompanhante=valor_acompanhante,
 
         aceitou_termos=aceitou_termos
     )
@@ -150,6 +152,7 @@ async def update_user(
     bio: str = Form(""),
     status: str = Form("disponível"),
     senha: str = Form(None),
+    valor_acompanhante: Optional[int] = Form(0),  # Adicionado na atualização
     fotos: List[UploadFile] = None,
     videos: List[UploadFile] = None,
     db: Session = Depends(get_db),
@@ -162,6 +165,7 @@ async def update_user(
     user.email = email
     user.bio = bio
     user.status = status
+    user.valor_acompanhante = valor_acompanhante
     if senha:
         user.senha = senha  # Em produção, sempre aplicar hash
 
@@ -174,10 +178,8 @@ async def update_user(
             upload_result = cloudinary.uploader.upload(foto.file, folder="usuarios")
             uploaded_fotos.append(upload_result["secure_url"])
 
-        # As 2 primeiras fotos ficam em campos próprios
         user.foto1 = uploaded_fotos[0] if len(uploaded_fotos) > 0 else user.foto1
         user.foto2 = uploaded_fotos[1] if len(uploaded_fotos) > 1 else user.foto2
-        # Restante vai para a galeria
         user.galeria = uploaded_fotos[2:] if len(uploaded_fotos) > 2 else []
 
     # Upload de vídeos
@@ -188,7 +190,7 @@ async def update_user(
         for video in videos:
             upload_result = cloudinary.uploader.upload(video.file, resource_type="video", folder="usuarios")
             uploaded_videos.append(upload_result["secure_url"])
-        user.video = uploaded_videos  # Armazena lista de vídeos
+        user.video = uploaded_videos
 
     db.commit()
     db.refresh(user)
@@ -222,120 +224,3 @@ def excluir_usuario(id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": "Usuário excluído com sucesso"}
-
-# === LIMPAR TODOS ===
-@router.post("/admin/limpar-tudo")
-def limpar_usuarios(db: Session = Depends(get_db)):
-    db.query(DBUser).delete()
-    db.commit()
-    return {"message": "Todos os usuários foram removidos do banco."}
-
-@router.delete("/users/confirm_delete/{user_id}", status_code=status.HTTP_200_OK)
-def confirmar_exclusao(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(DBUser).filter(DBUser.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
-
-    # Deletar fotos do Cloudinary
-    galeria = user.galeria.split(",") if user.galeria else []
-    for foto_url in [user.foto1, user.foto2] + galeria + [user.video]:
-        if foto_url:
-            public_id = foto_url.split("/")[-1].split(".")[0]
-            try:
-                cloudinary.uploader.destroy(public_id)
-            except Exception as e:
-                print(f"Erro ao excluir {public_id} do Cloudinary: {e}")
-
-    db.delete(user)
-    db.commit()
-    return {"msg": "Usuário excluído com sucesso"}
-
-@router.post("/users/request_delete")
-def solicitar_exclusao(email: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(DBUser).filter(DBUser.email == email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    
-    user.exclusao_pendente = True
-    db.commit()
-    return {"message": "Solicitação de exclusão enviada"}
-@router.post("/users/register")
-async def register_user(
-    name: str = Form(...),
-    email: str = Form(...),
-    role: str = Form(...),  # participante, cliente, administrador
-    senha: Optional[str] = Form(None),
-    bio: Optional[str] = Form(None),
-    status: Optional[str] = Form("disponível"),
-    fotos: List[UploadFile] = File(None),
-    video: Optional[UploadFile] = File(None),
-
-    forma_pagamento: Optional[str] = Form(None),
-    forma_recebimento: Optional[str] = Form(None),
-    tipo_chave_pix: Optional[str] = Form(None),
-    chave_pix: Optional[str] = Form(None),
-    valor_acompanhante: Optional[int] = Form(0),  # NOVO CAMPO
-    aceitou_termos: bool = Form(...),
-
-    db: Session = Depends(get_db)
-):
-    if not aceitou_termos:
-        raise HTTPException(status_code=400, detail="Você deve aceitar os termos de uso.")
-
-    existing_user = db.query(DBUser).filter(DBUser.email == email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email já registrado")
-
-    if role == "participante":
-        if not all([forma_recebimento, tipo_chave_pix, chave_pix]):
-            raise HTTPException(status_code=400, detail="Participantes devem informar chave Pix e tipo de chave.")
-    elif role == "cliente":
-        if not forma_pagamento:
-            raise HTTPException(status_code=400, detail="Clientes devem informar a forma de pagamento.")
-
-    # Inicializa variáveis de fotos e vídeo
-    foto1 = None
-    foto2 = None
-    galeria = []
-
-    # Upload das fotos
-    if fotos:
-        for index, foto in enumerate(fotos):
-            url = upload_to_cloudinary(foto)
-            if index == 0:
-                foto1 = url
-            elif index == 1:
-                foto2 = url
-            else:
-                galeria.append(url)
-
-    # Upload de vídeo
-    video_url = upload_to_cloudinary(video) if video else None
-
-    # Criação do usuário
-    user = DBUser(
-        name=name,
-        email=email,
-        role=role,
-        senha=senha,
-        bio=bio,
-        status=status,
-        foto1=foto1,
-        foto2=foto2,
-        galeria=",".join(galeria),
-        video=video_url,
-
-        forma_pagamento=forma_pagamento,
-        forma_recebimento=forma_recebimento,
-        tipo_chave_pix=tipo_chave_pix,
-        chave_pix=chave_pix,
-        valor_acompanhante=valor_acompanhante,
-
-        aceitou_termos=aceitou_termos
-    )
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return {"message": "Usuário registrado com sucesso", "user": user}
-
