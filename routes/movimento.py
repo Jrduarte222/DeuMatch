@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from datetime import datetime, timedelta
 from database import get_db
 from models import Movimento
-from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -45,7 +46,6 @@ def criar_movimento(
     db.refresh(movimento)
     return {"message": "Pedido registrado com sucesso", "movimento": movimento.id}
 
-
 # === LISTAR TODOS MOVIMENTOS (ADMIN) ===
 @router.get("/movimentos/list")
 def listar_todos_movimentos(db: Session = Depends(get_db)):
@@ -66,7 +66,6 @@ def listar_todos_movimentos(db: Session = Depends(get_db)):
         for m in movimentos
     ]
 
-
 # === LISTAR MOVIMENTOS DE UM CLIENTE ===
 @router.get("/movimentos/cliente/{cliente_id}")
 def listar_movimentos_cliente(cliente_id: int, db: Session = Depends(get_db)):
@@ -75,24 +74,46 @@ def listar_movimentos_cliente(cliente_id: int, db: Session = Depends(get_db)):
     agora = datetime.utcnow()
 
     for mov in movimentos:
-        status = mov.status or "aguardando"
+        # Garante que o participante_id seja int (chave de dicionário)
+        participante_id = int(mov.participante_id)
+        
+        if participante_id not in resultado:
+            resultado[participante_id] = {
+                "fotos": False,
+                "videos": False,
+                "acompanhante": False
+            }
 
-        # Verifica expiração
-        if status == "liberado" and mov.expiracao and mov.expiracao < agora:
-            mov.status = "expirado"
-            db.commit()
-            status = "expirado"
-
-        # Monta o retorno compatível com o frontend
-        if status == "liberado":
-            resultado.setdefault(mov.participante_id, {})[mov.tipo] = True
-        elif status == "aguardando":
-            resultado.setdefault(mov.participante_id, {})[mov.tipo] = "aguardando"
-        elif status == "expirado":
-            resultado.setdefault(mov.participante_id, {})[mov.tipo] = False
+        # Atualiza status
+        if mov.status == "liberado" and (not mov.expiracao or mov.expiracao > agora):
+            resultado[participante_id][mov.tipo] = True
+        elif mov.status == "aguardando":
+            resultado[participante_id][mov.tipo] = "aguardando"
 
     return resultado
 
+# === VERIFICAR SE CHAT ESTÁ LIBERADO ===
+@router.get("/chat/liberado/{cliente_id}/{participante_id}")
+def verificar_chat_liberado(
+    cliente_id: int,
+    participante_id: int,
+    db: Session = Depends(get_db)
+):
+    movimento = db.query(Movimento).filter(
+        Movimento.cliente_id == cliente_id,
+        Movimento.participante_id == participante_id,
+        Movimento.tipo == "acompanhante",
+        Movimento.status == "liberado",
+        or_(
+            Movimento.expiracao == None,
+            Movimento.expiracao > datetime.utcnow()
+        )
+    ).first()
+
+    return {
+        "liberado": movimento is not None,
+        "expiracao": movimento.expiracao if movimento else None
+    }
 
 # === LIBERAR PEDIDO (ADMIN) ===
 @router.put("/movimentos/liberar/{movimento_id}")
@@ -104,7 +125,6 @@ def liberar_movimento(movimento_id: int, db: Session = Depends(get_db)):
     movimento.expiracao = datetime.utcnow() + timedelta(hours=1)  # expira em 1 hora
     db.commit()
     return {"message": f"Movimento {movimento.id} liberado por 1 hora."}
-
 
 # === REPASSAR PAGAMENTO (ADMIN) ===
 @router.post("/movimentos/repassar/{movimento_id}")
