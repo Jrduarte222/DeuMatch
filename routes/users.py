@@ -36,7 +36,7 @@ class UserSchema(BaseModel):
     foto2: Optional[str] = None
     galeria: Optional[List[str]] = []
     video: Optional[str] = None
-    valor_acompanhante: Optional[int] = 0  # Adicionado
+    valor_acompanhante: Optional[int] = 0
 
     @validator("galeria", pre=True)
     def split_galeria(cls, v):
@@ -56,7 +56,7 @@ class UserWithPasswordSchema(UserSchema):
 async def register_user(
     name: str = Form(...),
     email: str = Form(...),
-    role: str = Form(...),  # participante, cliente, administrador
+    role: str = Form(...),
     senha: Optional[str] = Form(None),
     bio: Optional[str] = Form(None),
     status: Optional[str] = Form("disponível"),
@@ -67,7 +67,7 @@ async def register_user(
     forma_recebimento: Optional[str] = Form(None),
     tipo_chave_pix: Optional[str] = Form(None),
     chave_pix: Optional[str] = Form(None),
-    valor_acompanhante: Optional[int] = Form(0),  # Novo campo
+    valor_acompanhante: Optional[int] = Form(0),
     aceitou_termos: bool = Form(...),
 
     db: Session = Depends(get_db)
@@ -152,7 +152,7 @@ async def update_user(
     bio: str = Form(""),
     status: str = Form("disponível"),
     senha: str = Form(None),
-    valor_acompanhante: Optional[int] = Form(0),  # Adicionado na atualização
+    valor_acompanhante: Optional[int] = Form(0),
     fotos: List[UploadFile] = None,
     videos: List[UploadFile] = None,
     db: Session = Depends(get_db),
@@ -167,37 +167,74 @@ async def update_user(
     user.status = status
     user.valor_acompanhante = valor_acompanhante
     if senha:
-        user.senha = senha  # Em produção, sempre aplicar hash
+        user.senha = senha  # Em produção, usar hash
 
-    # Upload de fotos
+    # Upload de novas fotos (mantendo antigas)
     if fotos:
         if len(fotos) > 20:
             raise HTTPException(status_code=400, detail="Máximo de 20 fotos permitido.")
-        uploaded_fotos = []
-        for i, foto in enumerate(fotos):
+        existing_fotos = [user.foto1, user.foto2] + (user.galeria.split(',') if user.galeria else [])
+        for foto in fotos:
             upload_result = cloudinary.uploader.upload(foto.file, folder="usuarios")
-            uploaded_fotos.append(upload_result["secure_url"])
+            existing_fotos.append(upload_result["secure_url"])
+        user.foto1 = existing_fotos[0] if len(existing_fotos) > 0 else None
+        user.foto2 = existing_fotos[1] if len(existing_fotos) > 1 else None
+        user.galeria = ",".join(existing_fotos[2:]) if len(existing_fotos) > 2 else None
 
-        user.foto1 = uploaded_fotos[0] if len(uploaded_fotos) > 0 else user.foto1
-        user.foto2 = uploaded_fotos[1] if len(uploaded_fotos) > 1 else user.foto2
-        user.galeria = uploaded_fotos[2:] if len(uploaded_fotos) > 2 else []
-
-    # Upload de vídeos
+    # Upload de novos vídeos (mantendo antigos)
     if videos:
         if len(videos) > 5:
             raise HTTPException(status_code=400, detail="Máximo de 5 vídeos permitido.")
-        uploaded_videos = []
+        existing_videos = user.video.split(',') if user.video else []
         for video in videos:
             upload_result = cloudinary.uploader.upload(video.file, resource_type="video", folder="usuarios")
-            uploaded_videos.append(upload_result["secure_url"])
-        user.video = uploaded_videos
+            existing_videos.append(upload_result["secure_url"])
+        user.video = ",".join(existing_videos)
 
     db.commit()
     db.refresh(user)
-
     return {"mensagem": "Perfil atualizado com sucesso!", "user": user}
 
-# === LISTAR USUÁRIOS (exceto suspensos) ===
+# === EXCLUIR MÍDIA DO PERFIL ===
+@router.delete("/users/{user_id}/delete_media")
+def delete_media(
+    user_id: int,
+    media_url: str,
+    tipo: str,
+    db: Session = Depends(get_db)
+):
+    user = db.query(DBUser).filter(DBUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    try:
+        # Extrair public_id da URL
+        parts = media_url.split('/')
+        file_name = parts[-1].split('.')[0]
+        public_id = f"usuarios/{file_name}"
+
+        # Excluir do Cloudinary
+        resource_type = "video" if tipo == "video" else "image"
+        cloudinary.uploader.destroy(public_id, resource_type=resource_type)
+
+        # Remover do banco
+        if tipo == "foto":
+            fotos = [user.foto1, user.foto2] + (user.galeria.split(',') if user.galeria else [])
+            fotos = [f for f in fotos if f and f != media_url]
+            user.foto1 = fotos[0] if len(fotos) > 0 else None
+            user.foto2 = fotos[1] if len(fotos) > 1 else None
+            user.galeria = ','.join(fotos[2:]) if len(fotos) > 2 else None
+        elif tipo == "video":
+            videos = user.video.split(',') if user.video else []
+            videos = [v for v in videos if v != media_url]
+            user.video = ','.join(videos) if videos else None
+
+        db.commit()
+        return {"message": "Mídia excluída com sucesso"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao excluir mídia: {str(e)}")
+
+# === LISTAR USUÁRIOS ===
 @router.get("/users/list", response_model=List[UserWithPasswordSchema])
 async def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(DBUser)
