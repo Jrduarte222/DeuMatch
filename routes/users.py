@@ -261,3 +261,25 @@ def excluir_usuario(id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": "Usuário excluído com sucesso"}
+
+
+# === PEDIDO DE EXCLUSÃO DE PERFIL ===
+@router.post("/users/request_delete")
+def request_delete(
+    user_id: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(DBUser).filter(DBUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    from models import PedidoExclusao
+    pedido = db.query(PedidoExclusao).filter(PedidoExclusao.user_id == user_id).first()
+    if pedido:
+        raise HTTPException(status_code=400, detail="Pedido de exclusão já solicitado")
+
+    novo_pedido = PedidoExclusao(user_id=user_id)
+    db.add(novo_pedido)
+    db.commit()
+    db.refresh(novo_pedido)
+    return {"message": "Pedido de exclusão registrado. Aguarde aprovação do administrador."}
