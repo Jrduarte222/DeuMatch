@@ -262,8 +262,7 @@ def excluir_usuario(id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Usuário excluído com sucesso"}
 
-
-# === PEDIDO DE EXCLUSÃO DE PERFIL ===
+# === PEDIDO DE EXCLUSÃO (usando exclusao_pendente) ===
 @router.post("/users/request_delete")
 def request_delete(
     user_id: int = Form(...),
@@ -273,13 +272,15 @@ def request_delete(
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
-    from models import PedidoExclusao
-    pedido = db.query(PedidoExclusao).filter(PedidoExclusao.user_id == user_id).first()
-    if pedido:
+    if user.exclusao_pendente:
         raise HTTPException(status_code=400, detail="Pedido de exclusão já solicitado")
 
-    novo_pedido = PedidoExclusao(user_id=user_id)
-    db.add(novo_pedido)
+    user.exclusao_pendente = True
     db.commit()
-    db.refresh(novo_pedido)
     return {"message": "Pedido de exclusão registrado. Aguarde aprovação do administrador."}
+
+# === LISTAR PEDIDOS DE EXCLUSÃO (usando exclusao_pendente) ===
+@router.get("/admin/pedidos_exclusao")
+def listar_pedidos_exclusao(db: Session = Depends(get_db)):
+    users = db.query(DBUser).filter(DBUser.exclusao_pendente == True).all()
+    return [{"id": u.id, "name": u.name, "email": u.email, "timestamp": u.updated_at if hasattr(u, "updated_at") else None} for u in users]
