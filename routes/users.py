@@ -37,6 +37,7 @@ class UserSchema(BaseModel):
     galeria: Optional[List[str]] = []
     video: Optional[str] = None
     valor_acompanhante: Optional[int] = 0
+    exclusao_pendente: Optional[bool] = False
 
     @validator("galeria", pre=True)
     def split_galeria(cls, v):
