@@ -56,16 +56,3 @@ class Movimento(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     repassado = Column(Boolean, default=False)
     expiracao = Column(DateTime, nullable=True)               # hora de expiração do desbloqueio
-
-
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, func
-from sqlalchemy.orm import relationship
-
-class PedidoExclusao(Base):
-    __tablename__ = "pedidos_exclusao"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
-
-    user = relationship("User")

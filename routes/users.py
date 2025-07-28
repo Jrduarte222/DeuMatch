@@ -277,7 +277,7 @@ def request_delete(
 
     user.exclusao_pendente = True
     db.commit()
-    return {"message": "Pedido de exclusão registrado. Aguarde aprovação do administrador."}
+    return {"message": "Pedido de Exclusão registrado. Aguarde aprovação do administrador."}
 
 # === LISTAR PEDIDOS DE EXCLUSÃO (usando exclusao_pendente) ===
 @router.get("/admin/pedidos_exclusao")
