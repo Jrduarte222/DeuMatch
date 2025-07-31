@@ -70,16 +70,25 @@ async def register_user(
     chave_pix: Optional[str] = Form(None),
     valor_acompanhante: Optional[int] = Form(0),
     aceitou_termos: bool = Form(...),
+    codigoAcesso: Optional[str] = Form(None),  # Novo campo para administradores
 
     db: Session = Depends(get_db)
 ):
+    # Verificação dos termos
     if not aceitou_termos:
         raise HTTPException(status_code=400, detail="Você deve aceitar os termos de uso.")
 
+    # Verificação de e-mail duplicado
     existing_user = db.query(DBUser).filter(DBUser.email == email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email já registrado")
 
+    # Proteção para administradores com código secreto
+    if role == "administrador":
+        if codigoAcesso != "ADM-2025":
+            raise HTTPException(status_code=403, detail="Código de acesso inválido para administrador.")
+
+    # Verificações específicas por tipo
     if role == "participante":
         if not all([forma_recebimento, tipo_chave_pix, chave_pix]):
             raise HTTPException(status_code=400, detail="Participantes devem informar chave Pix e tipo de chave.")
@@ -102,8 +111,10 @@ async def register_user(
             else:
                 galeria.append(url)
 
+    # Upload do vídeo (se houver)
     video_url = upload_to_cloudinary(video) if video else None
 
+    # Criação do usuário no banco
     user = DBUser(
         name=name,
         email=email,
@@ -115,13 +126,11 @@ async def register_user(
         foto2=foto2,
         galeria=",".join(galeria),
         video=video_url,
-
         forma_pagamento=forma_pagamento,
         forma_recebimento=forma_recebimento,
         tipo_chave_pix=tipo_chave_pix,
         chave_pix=chave_pix,
         valor_acompanhante=valor_acompanhante,
-
         aceitou_termos=aceitou_termos
     )
 
@@ -129,6 +138,7 @@ async def register_user(
     db.commit()
     db.refresh(user)
     return {"message": "Usuário registrado com sucesso", "user": user}
+
 
 # === LOGIN SIMPLES ===
 @router.post("/users/login")
