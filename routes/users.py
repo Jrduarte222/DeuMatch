@@ -298,3 +298,12 @@ def request_delete(
 def listar_pedidos_exclusao(db: Session = Depends(get_db)):
     users = db.query(DBUser).filter(DBUser.exclusao_pendente == True).all()
     return [{"id": u.id, "name": u.name, "email": u.email, "timestamp": u.updated_at if hasattr(u, "updated_at") else None} for u in users]
+
+@router.put("/users/confirmar_maioridade/{user_id}")
+def confirmar_maioridade(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(DBUser).filter(DBUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    user.maior_idade = True
+    db.commit()
+    return {"message": "Maioridade confirmada"}

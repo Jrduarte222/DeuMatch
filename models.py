@@ -19,6 +19,7 @@ class User(Base):
     galeria = Column(Text, nullable=True)
     video = Column(Text, nullable=True)
     exclusao_pendente = Column(Boolean, default=False)
+    maior_idade = Column(Boolean, default=False)
 
     # Campos para pagamento e controle
     forma_pagamento = Column(String(50), nullable=True)       # Clientes
