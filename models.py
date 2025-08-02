@@ -13,6 +13,7 @@ class User(Base):
     role = Column(String(50), nullable=False)  # participante, cliente, administrador
     bio = Column(Text, nullable=True)
     status = Column(String(50), nullable=True)
+    whatsapp = Column(String(20), nullable=True)
     foto1 = Column(String, nullable=True)
     foto2 = Column(String, nullable=True)
     galeria = Column(Text, nullable=True)

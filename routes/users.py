@@ -38,6 +38,7 @@ class UserSchema(BaseModel):
     video: Optional[str] = None
     valor_acompanhante: Optional[int] = 0
     exclusao_pendente: Optional[bool] = False
+    whatsapp: Optional[str] = None
 
     @validator("galeria", pre=True)
     def split_galeria(cls, v):
@@ -63,12 +64,12 @@ async def register_user(
     status: Optional[str] = Form("disponível"),
     fotos: List[UploadFile] = File(None),
     video: Optional[UploadFile] = File(None),
-
     forma_pagamento: Optional[str] = Form(None),
     forma_recebimento: Optional[str] = Form(None),
     tipo_chave_pix: Optional[str] = Form(None),
     chave_pix: Optional[str] = Form(None),
     valor_acompanhante: Optional[int] = Form(0),
+    whatsapp: Optional[str] = Form(None),
     aceitou_termos: bool = Form(...),
     codigoAcesso: Optional[str] = Form(None),  # Novo campo para administradores
 
@@ -130,6 +131,7 @@ async def register_user(
         forma_recebimento=forma_recebimento,
         tipo_chave_pix=tipo_chave_pix,
         chave_pix=chave_pix,
+        whatsapp=whatsapp,
         valor_acompanhante=valor_acompanhante,
         aceitou_termos=aceitou_termos
     )
