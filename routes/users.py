@@ -39,6 +39,7 @@ class UserSchema(BaseModel):
     valor_acompanhante: Optional[int] = 0
     exclusao_pendente: Optional[bool] = False
     whatsapp: Optional[str] = None
+    chave_pix: Optional[str] = None
 
     @validator("galeria", pre=True)
     def split_galeria(cls, v):
